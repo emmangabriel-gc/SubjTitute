@@ -24,6 +24,10 @@ limit. Teacher and request changes are held in browser memory for this
 prototype and reset when the page is refreshed. Teacher search and CSV export
 are also available there.
 
+The app opens with a demo administrator login (`admin` / `adminaccess`). This
+client-side login is only a UI gate for the prototype; it is not production
+authentication and does not protect data from access.
+
 ## Validate
 
 ```bash

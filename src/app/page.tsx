@@ -224,6 +224,9 @@ export default function Home() {
   const [showTeacherForm, setShowTeacherForm] = useState(false);
   const [editingTeacher, setEditingTeacher] = useState<Teacher | null>(null);
   const [notice, setNotice] = useState("");
+  const [isSignedIn, setIsSignedIn] = useState(false);
+  const [loginError, setLoginError] = useState("");
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
 
   const openRequests = requests.filter((request) => request.status === "open");
   const filteredTeachers = useMemo(() => {
@@ -237,6 +240,21 @@ export default function Home() {
         ),
     );
   }, [search, teacherRecords]);
+
+  function signIn(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const username = String(formData.get("username") ?? "");
+    const password = String(formData.get("password") ?? "");
+
+    if (username !== "admin" || password !== "adminaccess") {
+      setLoginError("The username or password is incorrect.");
+      return;
+    }
+
+    setLoginError("");
+    setIsSignedIn(true);
+  }
 
   function runMatching(nextTeachers = teacherRecords, navigateToResults = true) {
     const start = performance.now();
@@ -515,6 +533,48 @@ export default function Home() {
     { label: "Match results", icon: "sparkles" },
   ];
 
+  if (!isSignedIn) {
+    return (
+      <main className="login-shell">
+        <section className="login-card" aria-labelledby="login-title">
+          <div className="login-brand">
+            <span className="brand-mark">s.</span>
+            <span className="brand-name">subjtitute<span>.</span></span>
+          </div>
+          <span className="eyebrow">ADMINISTRATOR ACCESS</span>
+          <h1 id="login-title">Welcome back</h1>
+          <p className="login-copy">Sign in to manage substitute teacher matching.</p>
+          <form className="login-form" onSubmit={signIn}>
+            <label className="login-field">
+              Username
+              <input
+                autoComplete="username"
+                name="username"
+                placeholder="Enter your username"
+                required
+              />
+            </label>
+            <label className="login-field">
+              Password
+              <input
+                autoComplete="current-password"
+                name="password"
+                placeholder="Enter your password"
+                required
+                type="password"
+              />
+            </label>
+            {loginError && <p className="login-error" role="alert">{loginError}</p>}
+            <button className="button button-primary login-submit" type="submit">
+              Sign in <Icon name="arrow" size={17} />
+            </button>
+          </form>
+          <p className="login-footnote">Administrator sign-in for Senior High School</p>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -529,15 +589,6 @@ export default function Home() {
           <span className="brand-mark">s.</span>
           <span className="brand-name">subjtitute<span>.</span></span>
         </a>
-
-        <div className="school-switcher">
-          <div className="school-avatar">S</div>
-          <div className="school-copy">
-            <span className="school-label">SCHOOL</span>
-            <strong>Northview Senior High</strong>
-          </div>
-          <Icon name="chevron" size={16} />
-        </div>
 
         <div className="nav-caption">WORKSPACE</div>
         <nav className="primary-nav" aria-label="Main navigation">
@@ -581,10 +632,45 @@ export default function Home() {
           <div className="profile">
             <div className="profile-avatar">AD</div>
             <div className="profile-copy">
-              <strong>Alexandra Diaz</strong>
-              <span>School administrator</span>
+              <strong>Admin</strong>
+              <span>Administrator</span>
             </div>
-            <button className="profile-more" aria-label="Profile options">···</button>
+            <div
+              className="profile-menu-wrapper"
+              onBlur={(event) => {
+                if (
+                  !(event.relatedTarget instanceof Node) ||
+                  !event.currentTarget.contains(event.relatedTarget)
+                ) {
+                  setIsProfileMenuOpen(false);
+                }
+              }}
+            >
+              <button
+                className="profile-more"
+                aria-label="Profile options"
+                aria-expanded={isProfileMenuOpen}
+                aria-haspopup="menu"
+                onClick={() => setIsProfileMenuOpen((open) => !open)}
+                type="button"
+              >
+                ···
+              </button>
+              {isProfileMenuOpen && (
+                <div className="profile-menu" role="menu">
+                  <button
+                    onClick={() => {
+                      setIsProfileMenuOpen(false);
+                      setIsSignedIn(false);
+                    }}
+                    role="menuitem"
+                    type="button"
+                  >
+                    Sign out
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </aside>
@@ -592,23 +678,43 @@ export default function Home() {
       <main className="main-area">
         <header className="topbar">
           <div className="mobile-brand"><span className="brand-mark">s.</span> subjtitute.</div>
-          <div className="breadcrumb"><span>Workspace</span><Icon name="chevron" size={14} /><strong>{activeView}</strong></div>
-          <div className="topbar-actions">
-            <label className="search-box">
-              <Icon name="search" size={18} />
-              <input
-                aria-label="Search teachers or subjects"
-                placeholder="Search anything..."
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-              />
-              <kbd>⌘ K</kbd>
-            </label>
-            <button className="icon-button notification-button" aria-label="Notifications">
-              <Icon name="bell" size={19} /><span className="notification-dot" />
+          <div
+            className="profile-menu-wrapper mobile-profile-menu"
+            onBlur={(event) => {
+              if (
+                !(event.relatedTarget instanceof Node) ||
+                !event.currentTarget.contains(event.relatedTarget)
+              ) {
+                setIsProfileMenuOpen(false);
+              }
+            }}
+          >
+            <button
+              className="profile-more"
+              aria-label="Profile options"
+              aria-expanded={isProfileMenuOpen}
+              aria-haspopup="menu"
+              onClick={() => setIsProfileMenuOpen((open) => !open)}
+              type="button"
+            >
+              ···
             </button>
-            <div className="topbar-avatar">AD</div>
+            {isProfileMenuOpen && (
+              <div className="profile-menu" role="menu">
+                <button
+                  onClick={() => {
+                    setIsProfileMenuOpen(false);
+                    setIsSignedIn(false);
+                  }}
+                  role="menuitem"
+                  type="button"
+                >
+                  Sign out
+                </button>
+              </div>
+            )}
           </div>
+          <div className="breadcrumb"><span>Workspace</span><Icon name="chevron" size={14} /><strong>{activeView}</strong></div>
         </header>
 
         <div className="page-content">
@@ -641,6 +747,7 @@ export default function Home() {
             <TeachersDirectory
               teachers={filteredTeachers}
               search={search}
+              onSearch={setSearch}
               onAdd={() => {
                 setEditingTeacher(null);
                 setShowTeacherForm(true);
@@ -801,12 +908,12 @@ function Overview({
   return (
     <>
       <PageHeading
-        eyebrow="SAMPLE SCHOOL DAY · MONDAY SCHEDULE"
+        eyebrow="SENIOR HIGH SCHOOL · MONDAY SCHEDULE"
         title={<>Good morning, Alexandra <span className="wave">✳</span></>}
-        description="Here’s what’s happening across your school today."
+        description="Here’s what’s happening across your senior high school today."
         actions={<><Button variant="secondary" onClick={onReport}><Icon name="plus" size={17} /> Report absence</Button><Button onClick={onRun}><Icon name="sparkles" size={17} /> Run matching</Button></>}
       />
-      <section className="stats-grid" aria-label="School overview">
+      <section className="stats-grid" aria-label="Senior high school overview">
         <StatCard label="Open requests" value={String(openCount).padStart(2, "0")} change="For Monday" icon="calendar" tone="yellow" />
         <StatCard label="Available teachers" value={String(teacherRecords.filter((teacher) => teacher.status === "available").length)} change={`of ${teacherRecords.length} teachers`} icon="users" tone="mint" />
         <StatCard label="Classes covered" value={`${fillRate}%`} change={hasRun ? `${matchedCountLabel(result)} recommendations` : "Ready to match"} icon="chart" tone="blue" />
@@ -869,7 +976,7 @@ function Overview({
 
       <div className="bottom-grid">
         <div className="mini-panel mini-panel-tip"><div className="tip-icon"><Icon name="shield" size={19} /></div><div><strong>Fair, explainable matches</strong><p>Every recommendation considers expertise, workload, schedule, and preferences.</p></div><button aria-label="Learn about matching" onClick={() => onNavigate("Settings")}><Icon name="chevron" size={18} /></button></div>
-        <div className="mini-panel mini-panel-color"><div className="mini-chart"><span /><span /><span /><span /><span /><span /><span /></div><div><strong>Smarter coverage, together</strong><p>Matching adapts to your school’s current policies.</p></div><span className="mini-sparkle">✳</span></div>
+        <div className="mini-panel mini-panel-color"><div className="mini-chart"><span /><span /><span /><span /><span /><span /><span /></div><div><strong>Smarter coverage, together</strong><p>Matching adapts to your senior high school’s current policies.</p></div><span className="mini-sparkle">✳</span></div>
       </div>
     </>
   );
@@ -1206,11 +1313,13 @@ function TeacherForm({
 function TeachersDirectory({
   teachers: visibleTeachers,
   search,
+  onSearch,
   onAdd,
   onEdit,
 }: {
   teachers: typeof teachers;
   search: string;
+  onSearch: (value: string) => void;
   onAdd: () => void;
   onEdit: (teacher: Teacher) => void;
 }) {
@@ -1239,7 +1348,7 @@ function TeachersDirectory({
       <PageHeading eyebrow="PEOPLE & AVAILABILITY" title="Your teachers" description="A clear view of subject expertise and current substitute capacity." actions={<><Button variant="secondary" onClick={exportTeachers}><Icon name="arrow" size={17} /> Export list</Button><Button onClick={onAdd}><Icon name="plus" size={17} /> Add teacher</Button></>} />
       <div className="subpage-stats"><StatCard label="Teachers shown" value={String(visibleTeachers.length).padStart(2, "0")} change={search ? "Matching your search" : "Across 4 departments"} icon="users" tone="blue" /><StatCard label="Available now" value={String(visibleTeachers.filter((teacher) => teacher.status === "available").length).padStart(2, "0")} change="Ready for matching" icon="check" tone="mint" /><StatCard label="Avg. teaching load" value={visibleTeachers.length ? (visibleTeachers.reduce((total, teacher) => total + teacher.teachingLoad, 0) / visibleTeachers.length).toFixed(1) : "—"} suffix={visibleTeachers.length ? " hrs" : ""} change="Weekly hours" icon="chart" tone="yellow" /></div>
       <div className="panel directory-panel">
-        <div className="panel-heading"><div><div className="panel-title-row"><h2>Teacher directory</h2><span className="count-pill">{visibleTeachers.length}</span></div><p>Search by name or subject specialization from the top bar.</p></div><button className="filter-button"><Icon name="filter" size={17} /> All statuses <Icon name="chevron" size={14} /></button></div>
+        <div className="panel-heading"><div><div className="panel-title-row"><h2>Teacher directory</h2><span className="count-pill">{visibleTeachers.length}</span></div><p>Search by name or subject specialization.</p></div><label className="directory-search"><Icon name="search" size={17} /><input aria-label="Search teachers or subjects" placeholder="Search teachers..." value={search} onChange={(event) => onSearch(event.target.value)} /></label></div>
         <div className="table-wrap">
           <table className="request-table teacher-table">
             <thead><tr><th>TEACHER</th><th>SUBJECT SPECIALIZATIONS</th><th>TEACHING LOAD</th><th>SUB LOAD</th><th>STATUS</th><th /></tr></thead>
@@ -1286,7 +1395,7 @@ function MatchResults({
       <PageHeading eyebrow="DECISION SUPPORT" title="Match results" description="Recommended coverage, ranked alternatives, and the factors behind every score." actions={<Button onClick={onRun}><Icon name="sparkles" size={17} /> Run matching</Button>} />
       <div className="results-banner">
         <div className="results-banner-icon"><Icon name="sparkles" size={20} /></div>
-        <div><strong>{hasRun ? "Matching run complete" : "Preview recommendations"}</strong><p>{hasRun ? `${Object.keys(result.assignments).length} of ${requests.length} classes matched in ${computeMillis} ms.` : "Add your school data to generate recommendations. Run matching again after each change."}</p></div>
+        <div><strong>{hasRun ? "Matching run complete" : "Preview recommendations"}</strong><p>{hasRun ? `${Object.keys(result.assignments).length} of ${requests.length} classes matched in ${computeMillis} ms.` : "Add your senior high school data to generate recommendations. Run matching again after each change."}</p></div>
         <div className="banner-metric"><strong>{Object.keys(result.assignments).length}/{requests.length}</strong><span>classes covered</span></div>
       </div>
       <div className="results-list">
@@ -1364,7 +1473,7 @@ function Settings() {
   ] as const;
   return (
     <>
-      <PageHeading eyebrow="SCHOOL CONFIGURATION" title="Matching settings" description="Tune the school’s eligibility rules and preference weights." />
+      <PageHeading eyebrow="SENIOR HIGH SCHOOL CONFIGURATION" title="Matching settings" description="Tune the senior high school’s eligibility rules and preference weights." />
       <div className="settings-grid">
         <section className="panel settings-card"><div className="panel-heading"><div><h2>Eligibility policy</h2><p>Hard requirements used to screen candidates.</p></div><span className="settings-icon"><Icon name="shield" /></span></div>
           <div className="setting-row"><div><strong>Minimum subject expertise</strong><span>Exact specialization or same subject category</span></div><span className="setting-value">0.60 <small>/ 1.00</small></span></div>
