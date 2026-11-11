@@ -14,10 +14,14 @@ teachers from the Teachers page and by reporting absences from the Absences
 view. The matcher works from the data you enter in the browser and does not
 include any built-in sample records. Use **Report absence** to add a class
 request, **Run matching** to calculate assignments, and **Confirm** to review
-a recommendation. The absence form accepts a first and last day and the
-weekday of the recurring class period. Add teachers from the Teachers page;
-use **Edit** in the teacher directory to update details, preferences, or any
-number of regular timetable periods. Edits refresh open match recommendations.
+a recommendation. When reporting absences, choose an existing teacher from
+the searchable teacher list and add each absent class date separately; the
+weekday is detected automatically and each date can have its own class times.
+Add teachers from the Teachers page;
+enter each teacher's level/qualification, then use **Edit** in the teacher
+directory to update details, preferences, or any number of regular timetable
+periods. Qualifications are recorded for display and export; they do not affect
+matching scores. Edits refresh open match recommendations.
 In Match results, select **Use** on a ranked alternative before confirming;
 alternatives are blocked if they would conflict with an assignment or workload
 limit. Teacher and request changes are held in browser memory for this

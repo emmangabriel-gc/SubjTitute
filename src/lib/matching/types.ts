@@ -14,6 +14,7 @@ export type Teacher = {
   status: "available" | "on_leave" | "inactive";
   specializations: string[];
   timetable: TimeSlot[];
+  qualification: string;
   teachingLoad: number;
   currentSubLoad: number;
   honorariumRate: number;

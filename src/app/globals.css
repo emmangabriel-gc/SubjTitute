@@ -307,6 +307,29 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .subject-check-grid label:has(input:checked) { border-color: #b6ecbb; background: #f3fff4; color: #3e8047; }
 .subject-check-grid input, .schedule-toggle input { margin: 1px 0 0; accent-color: #55c96b; }
 .schedule-picker { padding: 12px; border: 1px solid #eeeef2; border-radius: 9px; }
+.absence-period-list { min-width: 0; padding: 0; border: 0; margin: 0 0 15px; }
+.absence-period-list legend { width: 100%; margin-bottom: 9px; color: #5e606c; font-size: 10px; font-weight: 700; }
+.absence-period-list legend span { margin-left: 5px; color: #a0a1ab; font-size: 9px; font-weight: 500; }
+.absence-period { display: grid; grid-template-columns: minmax(130px,1.4fr) minmax(85px,1fr) minmax(85px,1fr) auto; gap: 8px; align-items: end; padding: 10px; margin-bottom: 8px; border: 1px solid #eeeef2; border-radius: 9px; background: #fbfbfd; }
+.absence-period .field-label { min-width: 0; margin: 0; font-size: 9px; }
+.absence-period .field-label input, .absence-period .field-label select { min-width: 0; padding: 0 6px; font-size: 10px; }
+.absence-period-meta { display: flex; align-items: center; justify-content: flex-end; gap: 5px; min-height: 36px; color: #4b9b57; font-size: 9px; font-weight: 700; }
+.absence-period-meta .remove-period { flex: 0 0 28px; }
+.teacher-picker { position: relative; width: 100%; }
+.teacher-picker-trigger { width: 100%; min-height: 39px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 11px; border: 1px solid #e8e8ee; border-radius: 8px; background: #fff; color: #292a34; text-align: left; font-size: 12px; font-weight: 500; cursor: pointer; }
+.teacher-picker-trigger > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.teacher-picker-trigger svg { flex: 0 0 auto; color: #888a96; transform: rotate(90deg); transition: transform .16s ease; }
+.teacher-picker-trigger[aria-expanded="true"] svg { transform: rotate(-90deg); }
+.teacher-picker-placeholder { color: #adaeb7; }
+.teacher-picker-popover { position: absolute; z-index: 15; top: calc(100% + 5px); left: 0; right: 0; padding: 8px; border: 1px solid #e8e8ee; border-radius: 10px; background: #fff; box-shadow: 0 12px 32px #11121a20; }
+.teacher-picker-search { width: 100%; height: 38px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border: 1px solid #e8e8ee; border-radius: 7px; color: #999ba6; }
+.teacher-picker-search svg { flex: 0 0 16px; }
+.teacher-picker-search input { width: 100%; min-width: 0; height: 100%; padding: 0; border: 0; border-radius: 0; outline: 0; background: transparent; color: #292a34; font-size: 12px; }
+.teacher-picker-options { max-height: 172px; overflow-y: auto; margin-top: 5px; }
+.teacher-picker-options button { width: 100%; min-height: 42px; display: flex; flex-direction: column; justify-content: center; gap: 3px; padding: 7px 8px; border: 0; border-radius: 6px; background: transparent; color: #292a34; text-align: left; font-size: 12px; font-weight: 650; cursor: pointer; }
+.teacher-picker-options button:hover, .teacher-picker-options button[aria-selected="true"] { background: #eaf5ff; }
+.teacher-picker-options button small { color: #898b99; font-size: 10px; font-weight: 500; }
+.teacher-picker-empty { margin: 5px 0 0; padding: 12px 10px; border-radius: 7px; background: #f7f8fb; color: #777987; font-size: 11px; line-height: 1.5; }
 .empty-schedule { margin: 0 0 10px; color: #9899a5; font-size: 9px; }
 .schedule-period { display: grid; grid-template-columns: .85fr 1fr 1fr 28px; gap: 8px; align-items: end; margin: 0 0 9px; }
 .schedule-period .field-label { margin-bottom: 0; font-size: 9px; }
@@ -318,8 +341,8 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .modal-heading h2 { font-size: 22px; letter-spacing: -.8px; margin: 7px 0 0; }
 .modal-copy { font-size: 11px; color: #858692; line-height: 1.55; margin: 9px 0 20px; }
 .field-label { display: flex; flex-direction: column; gap: 7px; margin-bottom: 14px; color: #5e606c; font-size: 10px; font-weight: 700; }
-.field-label input, .field-label select { width: 100%; height: 39px; padding: 0 10px; background: #fff; border: 1px solid #e8e8ee; border-radius: 8px; color: #292a34; font-size: 11px; font-weight: 500; }
-.field-label input::placeholder { color: #adaeb7; }
+.field-label > input, .field-label > select { width: 100%; height: 39px; padding: 0 10px; background: #fff; border: 1px solid #e8e8ee; border-radius: 8px; color: #292a34; font-size: 11px; font-weight: 500; }
+.field-label > input::placeholder { color: #adaeb7; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding-top: 5px; }
 .toast { z-index: 20; position: fixed; bottom: 23px; left: 50%; transform: translateX(-50%); min-height: 42px; display: flex; align-items: center; gap: 9px; padding: 0 15px 0 10px; border-radius: 10px; background: #171821; color: #fff; box-shadow: 0 8px 26px #11121a35; font-size: 11px; font-weight: 600; animation: toast-in .18s ease-out; }
@@ -410,6 +433,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
   .filter-button { flex: 0 0 auto; }
   .table-note { align-items: flex-start; line-height: 1.5; }
   .absence-modal { padding: 19px; }
+  .absence-period { grid-template-columns: minmax(100px,1.4fr) minmax(75px,1fr) minmax(75px,1fr) auto; gap: 6px; padding: 7px; }
   .subject-check-grid { grid-template-columns: 1fr 1fr; }
   .schedule-period { grid-template-columns: .8fr 1fr 1fr 27px; gap: 5px; }
   .mobile-nav { position: fixed; z-index: 8; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-around; padding: 7px 5px max(8px, env(safe-area-inset-bottom)); border-top: 1px solid #ececf1; background: #ffffffed; backdrop-filter: blur(14px); }
@@ -490,11 +514,25 @@ html[data-theme="dark"] .explanation-grid > div { border-color: #33414d; }
 html[data-theme="dark"] .profile-menu,
 html[data-theme="dark"] .button-secondary,
 html[data-theme="dark"] .theme-toggle,
-html[data-theme="dark"] .field-label input,
-html[data-theme="dark"] .field-label select,
+html[data-theme="dark"] .field-label > input,
+html[data-theme="dark"] .field-label > select,
 html[data-theme="dark"] .login-field input,
 html[data-theme="dark"] .round-arrow,
-html[data-theme="dark"] .panel-footer-link { background: #222f3b; color: var(--foreground); border-color: #3a4a58; }
+html[data-theme="dark"] .panel-footer-link,
+html[data-theme="dark"] .teacher-picker-trigger,
+html[data-theme="dark"] .teacher-picker-popover,
+html[data-theme="dark"] .teacher-picker-search { background: #222f3b; color: var(--foreground); border-color: #3a4a58; }
+html[data-theme="dark"] .teacher-picker-search input,
+html[data-theme="dark"] .teacher-picker-options button { color: var(--foreground); }
+html[data-theme="dark"] .teacher-picker-options button:hover,
+html[data-theme="dark"] .teacher-picker-options button[aria-selected="true"] { background: #293a48; }
+html[data-theme="dark"] .teacher-picker-options button small,
+html[data-theme="dark"] .teacher-picker-empty { color: #aab8c3; }
+html[data-theme="dark"] .teacher-picker-empty { background: #222f3b; }
+html[data-theme="dark"] .absence-period { background: #1b2530; border-color: #33414d; }
+html[data-theme="dark"] .absence-period-list legend { color: #e1e8ed; }
+html[data-theme="dark"] .absence-period-list legend span { color: #aab8c3; }
+html[data-theme="dark"] .absence-period-meta { color: #8af394; }
 html[data-theme="dark"] .profile-menu button { color: #ff858d; }
 html[data-theme="dark"] .profile-menu button:hover { background: #3a2930; }
 html[data-theme="dark"] .profile-more { color: #aebac4; }
@@ -554,7 +592,7 @@ html[data-theme="dark"] .theme-toggle:hover { background: #293a48; }
 html[data-theme="dark"] .login-shell { background: radial-gradient(ellipse at 18% 15%, #17352b 0, transparent 34%), radial-gradient(ellipse at 85% 85%, #1b2b3c 0, transparent 35%), var(--background); }
 html[data-theme="dark"] .login-footnote { border-color: #33414d; color: #aab8c3; }
 html[data-theme="dark"] .login-field input::placeholder,
-html[data-theme="dark"] .field-label input::placeholder { color: #8494a1; }
+html[data-theme="dark"] .field-label > input::placeholder { color: #8494a1; }
 html[data-theme="dark"] .login-error { color: #ff858d; }
 html[data-theme="dark"] .settings-icon,
 html[data-theme="dark"] .weight-total,

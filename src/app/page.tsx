@@ -47,7 +47,13 @@ const subjectOptions = [
   "Programming",
   "Empowerment Technologies",
 ];
-const weekDays = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+const weekDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const qualificationOptions = [
+  "Bachelor's degree",
+  "Bachelor's degree with professional education units",
+  "Master's degree",
+  "Doctorate",
+];
 const teacherColors = [
   "#d9ff91",
   "#ffe6b5",
@@ -151,20 +157,21 @@ function formatDate(value: string): string {
 function formatDateRange(request: ClassRequest): string | null {
   const { dateFrom, dateTo } = request.slot;
   if (!dateFrom || !dateTo) return null;
-  return `${formatDate(dateFrom)} – ${formatDate(dateTo)} · ${request.slot.day}`;
+  if (dateFrom === dateTo) {
+    return new Intl.DateTimeFormat("en", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(new Date(`${dateFrom}T00:00:00Z`));
+  }
+  return `${formatDate(dateFrom)} – ${formatDate(dateTo)}`;
 }
 
-function dateRangeIncludesWeekday(
-  dateFrom: string,
-  dateTo: string,
-  day: string,
-): boolean {
-  const dayIndex = weekDays.indexOf(day) + 1;
-  const start = new Date(`${dateFrom}T00:00:00Z`);
-  const end = new Date(`${dateTo}T00:00:00Z`);
-  const daysUntilOccurrence = (dayIndex - start.getUTCDay() + 7) % 7;
-  start.setUTCDate(start.getUTCDate() + daysUntilOccurrence);
-  return start <= end;
+function weekdayForDate(date: string): string {
+  const weekdayIndex = new Date(`${date}T00:00:00Z`).getUTCDay();
+  return weekDays[(weekdayIndex + 6) % weekDays.length];
 }
 
 function updateMatchResult(
@@ -398,58 +405,67 @@ export default function Home() {
     const formData = new FormData(event.currentTarget);
     const subject = String(formData.get("subject") ?? "").trim();
     const section = String(formData.get("section") ?? "").trim();
-    const startHour = Number(formData.get("startHour"));
-    const endHour = Number(formData.get("endHour"));
     const budgetCap = Number(formData.get("budgetCap"));
     const absentTeacher = String(formData.get("absentTeacher") ?? "").trim();
-    const dateFrom = String(formData.get("dateFrom") ?? "");
-    const dateTo = String(formData.get("dateTo") ?? "");
-    const day = String(formData.get("day") ?? "");
+    const absenceDates = formData.getAll("absenceDate").map(String);
+    const startHours = formData.getAll("startHour").map((hour) => Number(hour));
+    const endHours = formData.getAll("endHour").map((hour) => Number(hour));
+    const absentTeacherRecord = teacherRecords.find(
+      (teacher) => teacher.id === absentTeacher,
+    );
     if (
       !subject ||
       !section ||
-      !absentTeacher ||
-      !dateFrom ||
-      !dateTo ||
-      dateTo < dateFrom ||
-      !weekDays.includes(day) ||
-      !dateRangeIncludesWeekday(dateFrom, dateTo, day) ||
-      !Number.isFinite(startHour) ||
-      !Number.isFinite(endHour) ||
-      endHour <= startHour ||
+      !absentTeacherRecord ||
+      absenceDates.length === 0 ||
+      absenceDates.some((date) => !date) ||
+      new Set(absenceDates).size !== absenceDates.length ||
+      startHours.length !== absenceDates.length ||
+      endHours.length !== absenceDates.length ||
+      startHours.some((start, index) =>
+        !Number.isFinite(start) ||
+        !Number.isFinite(endHours[index]) ||
+        start < 0 ||
+        endHours[index] > 24 ||
+        endHours[index] <= start,
+      ) ||
       !Number.isFinite(budgetCap) ||
       budgetCap < 0
     ) {
-      setNotice("Please enter valid absence details.");
+      setNotice("Choose a teacher, unique absence dates, valid class times, and a valid budget.");
       return;
     }
 
-    const nextRequest: ClassRequest = {
-      id: `C${String(
-        requests.reduce((max, request) => {
-          const number = Number(request.id.replace(/\D/g, ""));
-          return Number.isFinite(number) ? Math.max(max, number) : max;
-        }, 0) + 1,
-      ).padStart(2, "0")}`,
-      subject,
-      slot: {
-        day,
-        start: startHour * 60,
-        end: endHour * 60,
-        dateFrom,
-        dateTo,
-      },
-      gradeLevel: Number(formData.get("gradeLevel")),
-      section,
-      minutesUntilStart: 120,
-      budgetCap,
-      absentTeacherId: absentTeacher,
-      status: "open",
-    };
-    setRequests((current) => [...current, nextRequest]);
+    const firstRequestNumber = requests.reduce((max, request) => {
+      const number = Number(request.id.replace(/\D/g, ""));
+      return Number.isFinite(number) ? Math.max(max, number) : max;
+    }, 0) + 1;
+    const nextRequests: ClassRequest[] = absenceDates.map((date, index) => {
+      const weekday = weekdayForDate(date);
+      return {
+        id: `C${String(firstRequestNumber + index).padStart(2, "0")}`,
+        subject,
+        slot: {
+          day: weekday,
+          start: startHours[index] * 60,
+          end: endHours[index] * 60,
+          dateFrom: date,
+          dateTo: date,
+        },
+        gradeLevel: Number(formData.get("gradeLevel")),
+        section,
+        minutesUntilStart: 120,
+        budgetCap,
+        absentTeacherId: absentTeacherRecord.id,
+        status: "open",
+      };
+    });
+    setRequests((current) => [...current, ...nextRequests]);
     setShowAbsenceForm(false);
     setActiveView("Absences");
-    setNotice("Absence reported. It is ready to be matched.");
+    setNotice(
+      `${nextRequests.length} absence ${nextRequests.length === 1 ? "request" : "requests"} reported. Ready to be matched.`,
+    );
     window.setTimeout(() => setNotice(""), 3200);
   }
 
@@ -462,7 +478,8 @@ export default function Home() {
       .map(String)
       .filter((subject) => subjectOptions.includes(subject));
     const status = String(formData.get("status") ?? "");
-    const teachingLoad = Number(formData.get("teachingLoad"));
+    const qualification = String(formData.get("qualification") ?? "").trim();
+    const teachingLoad = editingTeacher?.teachingLoad ?? 20;
     const honorariumRate = Number(formData.get("honorariumRate"));
     const requiredPrepMinutes = Number(formData.get("requiredPrepMinutes"));
     let parsedTimetable: unknown;
@@ -500,6 +517,9 @@ export default function Home() {
     const timetable = parsedTimetable;
     if (
       !name ||
+      !qualification ||
+      (!qualificationOptions.includes(qualification) &&
+        qualification !== editingTeacher?.qualification) ||
       specializations.length === 0 ||
       (status !== "available" && status !== "on_leave" && status !== "inactive") ||
       !Number.isFinite(teachingLoad) ||
@@ -545,6 +565,7 @@ export default function Home() {
       status,
       specializations,
       timetable,
+      qualification,
       teachingLoad,
       currentSubLoad: editingTeacher?.currentSubLoad ?? 0,
       honorariumRate,
@@ -590,7 +611,7 @@ export default function Home() {
             <ThemeToggle darkMode={darkMode} onToggle={toggleTheme} compact />
           </div>
           <span className="eyebrow">ADMINISTRATOR ACCESS</span>
-          <h1 id="login-title">Welcome back</h1>
+          <h1 id="login-title">Welcome back, Admin</h1>
           <p className="login-copy">Sign in to manage substitute teacher matching.</p>
           <form className="login-form" onSubmit={signIn}>
             <label className="login-field">
@@ -841,38 +862,11 @@ export default function Home() {
 
       {notice && <div className="toast"><span className="toast-check"><Icon name="check" size={15} /></span>{notice}</div>}
       {showAbsenceForm && (
-        <div className="modal-backdrop" onMouseDown={(event) => {
-          if (event.target === event.currentTarget) setShowAbsenceForm(false);
-        }}>
-          <form className="absence-modal" onSubmit={addAbsence}>
-            <div className="modal-heading">
-              <div><span className="eyebrow">NEW REQUEST</span><h2>Report an absence</h2></div>
-              <button type="button" className="icon-button" aria-label="Close dialog" onClick={() => setShowAbsenceForm(false)}><Icon name="x" /></button>
-            </div>
-            <p className="modal-copy">Set the class period and how long the teacher will be away. The class repeats on its selected weekday within these dates.</p>
-            <label className="field-label">Absent teacher<input required name="absentTeacher" placeholder="e.g. Ms. Villareal" /></label>
-            <label className="field-label">Subject
-              <select name="subject" defaultValue="Earth Science">
-                {subjectOptions.map((subject) => <option key={subject}>{subject}</option>)}
-              </select>
-            </label>
-            <div className="form-grid">
-              <label className="field-label">Grade<select name="gradeLevel" defaultValue="11"><option value="11">Grade 11</option><option value="12">Grade 12</option></select></label>
-              <label className="field-label">Section<input required name="section" placeholder="STEM A" /></label>
-            </div>
-            <div className="form-grid">
-              <label className="field-label">First day absent<input required name="dateFrom" type="date" /></label>
-              <label className="field-label">Last day absent<input required name="dateTo" type="date" /></label>
-            </div>
-            <label className="field-label">Class weekday<select name="day" defaultValue="Mon">{weekDays.map((day) => <option key={day} value={day}>{day}</option>)}</select></label>
-            <div className="form-grid">
-              <label className="field-label">Start hour<select name="startHour" defaultValue="9">{Array.from({ length: 10 }, (_, index) => index + 7).map((hour) => <option key={hour} value={hour}>{formatTime(hour * 60)}</option>)}</select></label>
-              <label className="field-label">End hour<select name="endHour" defaultValue="10">{Array.from({ length: 10 }, (_, index) => index + 8).map((hour) => <option key={hour} value={hour}>{formatTime(hour * 60)}</option>)}</select></label>
-            </div>
-            <label className="field-label">Honorarium budget<input required name="budgetCap" type="number" min="0" defaultValue="200" /></label>
-            <div className="modal-footer"><button type="button" className="button button-quiet" onClick={() => setShowAbsenceForm(false)}>Cancel</button><button type="submit" className="button button-primary"><Icon name="plus" size={17} /> Create request</button></div>
-          </form>
-        </div>
+        <AbsenceForm
+          teachers={teacherRecords}
+          onSubmit={addAbsence}
+          onClose={() => setShowAbsenceForm(false)}
+        />
       )}
       {showTeacherForm && (
         <TeacherForm
@@ -884,6 +878,231 @@ export default function Home() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+type AbsencePeriod = {
+  id: number;
+  date: string;
+  startHour: string;
+  endHour: string;
+};
+
+function AbsenceForm({
+  teachers: teacherRecords,
+  onSubmit,
+  onClose,
+}: {
+  teachers: Teacher[];
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onClose: () => void;
+}) {
+  const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
+  const [teacherSearch, setTeacherSearch] = useState("");
+  const [isTeacherPickerOpen, setIsTeacherPickerOpen] = useState(false);
+  const [periods, setPeriods] = useState<AbsencePeriod[]>([
+    { id: 0, date: "", startHour: "9", endHour: "10" },
+  ]);
+  const [nextPeriodId, setNextPeriodId] = useState(1);
+  const matchingTeachers = teacherRecords.filter((teacher) =>
+    teacher.name.toLowerCase().includes(teacherSearch.trim().toLowerCase()),
+  );
+  const startHours = Array.from({ length: 10 }, (_, index) => index + 7);
+  const endHours = Array.from({ length: 10 }, (_, index) => index + 8);
+
+  function updatePeriod(
+    id: number,
+    property: "date" | "startHour" | "endHour",
+    value: string,
+  ) {
+    setPeriods((current) =>
+      current.map((period) =>
+        period.id === id ? { ...period, [property]: value } : period,
+      ),
+    );
+  }
+
+  return (
+    <div
+      className="modal-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <form className="absence-modal" onSubmit={onSubmit}>
+        <div className="modal-heading">
+          <div>
+            <span className="eyebrow">NEW REQUEST</span>
+            <h2>Report an absence</h2>
+          </div>
+          <button type="button" className="icon-button" aria-label="Close dialog" onClick={onClose}>
+            <Icon name="x" />
+          </button>
+        </div>
+        <p className="modal-copy">
+          Select an absent teacher, then add each class date with its own start and end time.
+        </p>
+        <input type="hidden" name="absentTeacher" value={selectedTeacher?.id ?? ""} />
+        <div className="field-label">
+          Absent teacher
+          <div className="teacher-picker">
+            <button
+              aria-expanded={isTeacherPickerOpen}
+              aria-haspopup="listbox"
+              className="teacher-picker-trigger"
+              onClick={() => {
+                setIsTeacherPickerOpen((open) => !open);
+                setTeacherSearch("");
+              }}
+              type="button"
+            >
+              <span className={selectedTeacher ? "" : "teacher-picker-placeholder"}>
+                {selectedTeacher?.name ?? "Select a teacher"}
+              </span>
+              <Icon name="chevron" size={16} />
+            </button>
+            {isTeacherPickerOpen && (
+              <div className="teacher-picker-popover">
+                <label className="teacher-picker-search">
+                  <Icon name="search" size={16} />
+                  <input
+                    autoFocus
+                    aria-label="Search teachers"
+                    onChange={(event) => setTeacherSearch(event.target.value)}
+                    placeholder="Search teachers..."
+                    value={teacherSearch}
+                  />
+                </label>
+                <div className="teacher-picker-options" role="listbox" aria-label="Teachers">
+                  {matchingTeachers.map((teacher) => (
+                    <button
+                      aria-selected={selectedTeacher?.id === teacher.id}
+                      key={teacher.id}
+                      onClick={() => {
+                        setSelectedTeacher(teacher);
+                        setIsTeacherPickerOpen(false);
+                      }}
+                      role="option"
+                      type="button"
+                    >
+                      <span>{teacher.name}</span>
+                      <small>{teacher.specializations.join(", ")}</small>
+                    </button>
+                  ))}
+                  {matchingTeachers.length === 0 && (
+                    <p className="teacher-picker-empty">
+                      {teacherRecords.length === 0
+                        ? "No teachers yet. Add a teacher in the Teachers page first."
+                        : "No teachers match your search."}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+        <label className="field-label">
+          Subject
+          <select name="subject" defaultValue="Earth Science">
+            {subjectOptions.map((subject) => <option key={subject}>{subject}</option>)}
+          </select>
+        </label>
+        <div className="form-grid">
+          <label className="field-label">
+            Grade
+            <select name="gradeLevel" defaultValue="11">
+              <option value="11">Grade 11</option>
+              <option value="12">Grade 12</option>
+            </select>
+          </label>
+          <label className="field-label">
+            Section
+            <input required name="section" placeholder="STEM A" />
+          </label>
+        </div>
+        <fieldset className="absence-period-list">
+          <legend>Absent class days <span>Weekday is recognized from each date</span></legend>
+          {periods.map((period, index) => (
+            <div className="absence-period" key={period.id}>
+              <label className="field-label">
+                Date
+                <input
+                  required
+                  name="absenceDate"
+                  onChange={(event) => updatePeriod(period.id, "date", event.target.value)}
+                  type="date"
+                  value={period.date}
+                />
+              </label>
+              <label className="field-label">
+                Start
+                <select
+                  name="startHour"
+                  onChange={(event) => updatePeriod(period.id, "startHour", event.target.value)}
+                  value={period.startHour}
+                >
+                  {startHours.map((hour) => (
+                    <option key={hour} value={hour}>{formatTime(hour * 60)}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="field-label">
+                End
+                <select
+                  name="endHour"
+                  onChange={(event) => updatePeriod(period.id, "endHour", event.target.value)}
+                  value={period.endHour}
+                >
+                  {endHours.map((hour) => (
+                    <option key={hour} value={hour}>{formatTime(hour * 60)}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="absence-period-meta">
+                <span>{period.date ? weekdayForDate(period.date) : "Select date"}</span>
+                {periods.length > 1 && (
+                  <button
+                    aria-label={`Remove absent day ${index + 1}`}
+                    className="remove-period"
+                    onClick={() =>
+                      setPeriods((current) =>
+                        current.filter((item) => item.id !== period.id),
+                      )
+                    }
+                    type="button"
+                  >
+                    <Icon name="x" size={14} />
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+          <button
+            className="add-period-button"
+            onClick={() => {
+              setPeriods((current) => [
+                ...current,
+                { id: nextPeriodId, date: "", startHour: "9", endHour: "10" },
+              ]);
+              setNextPeriodId((id) => id + 1);
+            }}
+            type="button"
+          >
+            <Icon name="plus" size={14} /> Add another absent day
+          </button>
+        </fieldset>
+        <label className="field-label">
+          Honorarium budget per class
+          <input required name="budgetCap" type="number" min="0" defaultValue="200" />
+        </label>
+        <div className="modal-footer">
+          <button type="button" className="button button-quiet" onClick={onClose}>Cancel</button>
+          <button type="submit" className="button button-primary">
+            <Icon name="plus" size={17} /> Create request
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
@@ -958,7 +1177,7 @@ function Overview({
     <>
       <PageHeading
         eyebrow="SENIOR HIGH SCHOOL · MONDAY SCHEDULE"
-        title={<>Good morning, Alexandra <span className="wave">✳</span></>}
+        title={<>Welcome back, Admin <span className="wave">✳</span></>}
         description="Here’s what’s happening across your senior high school today."
         actions={<><Button variant="secondary" onClick={onReport}><Icon name="plus" size={17} /> Report absence</Button><Button onClick={onRun}><Icon name="sparkles" size={17} /> Run matching</Button></>}
       />
@@ -1240,8 +1459,20 @@ function TeacherForm({
             </select>
           </label>
           <label className="field-label">
-            Weekly teaching load
-            <input required name="teachingLoad" type="number" min="0" max="30" step="0.5" defaultValue={teacher?.teachingLoad ?? 20} />
+            Teacher&apos;s level / qualification
+            <select
+              required
+              name="qualification"
+              defaultValue={teacher?.qualification ?? ""}
+            >
+              <option value="" disabled>Select a qualification</option>
+              {teacher?.qualification && !qualificationOptions.includes(teacher.qualification) && (
+                <option value={teacher.qualification}>{teacher.qualification}</option>
+              )}
+              {qualificationOptions.map((qualification) => (
+                <option key={qualification} value={qualification}>{qualification}</option>
+              ))}
+            </select>
           </label>
         </div>
         <div className="form-grid">
@@ -1373,12 +1604,12 @@ function TeachersDirectory({
   onEdit: (teacher: Teacher) => void;
 }) {
   function exportTeachers() {
-    const header = ["Name", "Status", "Specializations", "Teaching load", "Substitute load"];
+    const header = ["Name", "Status", "Specializations", "Level / qualification", "Substitute load"];
     const rows = visibleTeachers.map((teacher) => [
       teacher.name,
       teacher.status,
       teacher.specializations.join("; "),
-      String(teacher.teachingLoad),
+      teacher.qualification,
       String(teacher.currentSubLoad),
     ]);
     const csv = [header, ...rows]
@@ -1395,16 +1626,16 @@ function TeachersDirectory({
   return (
     <>
       <PageHeading eyebrow="PEOPLE & AVAILABILITY" title="Your teachers" description="A clear view of subject expertise and current substitute capacity." actions={<><Button variant="secondary" onClick={exportTeachers}><Icon name="arrow" size={17} /> Export list</Button><Button onClick={onAdd}><Icon name="plus" size={17} /> Add teacher</Button></>} />
-      <div className="subpage-stats"><StatCard label="Teachers shown" value={String(visibleTeachers.length).padStart(2, "0")} change={search ? "Matching your search" : "Across 4 departments"} icon="users" tone="blue" /><StatCard label="Available now" value={String(visibleTeachers.filter((teacher) => teacher.status === "available").length).padStart(2, "0")} change="Ready for matching" icon="check" tone="mint" /><StatCard label="Avg. teaching load" value={visibleTeachers.length ? (visibleTeachers.reduce((total, teacher) => total + teacher.teachingLoad, 0) / visibleTeachers.length).toFixed(1) : "—"} suffix={visibleTeachers.length ? " hrs" : ""} change="Weekly hours" icon="chart" tone="yellow" /></div>
+      <div className="subpage-stats"><StatCard label="Teachers shown" value={String(visibleTeachers.length).padStart(2, "0")} change={search ? "Matching your search" : "Across 4 departments"} icon="users" tone="blue" /><StatCard label="Available now" value={String(visibleTeachers.filter((teacher) => teacher.status === "available").length).padStart(2, "0")} change="Ready for matching" icon="check" tone="mint" /><StatCard label="Qualification levels" value={String(new Set(visibleTeachers.map((teacher) => teacher.qualification.trim()).filter(Boolean)).size)} change="Distinct levels recorded" icon="chart" tone="yellow" /></div>
       <div className="panel directory-panel">
         <div className="panel-heading"><div><div className="panel-title-row"><h2>Teacher directory</h2><span className="count-pill">{visibleTeachers.length}</span></div><p>Search by name or subject specialization.</p></div><label className="directory-search"><Icon name="search" size={17} /><input aria-label="Search teachers or subjects" placeholder="Search teachers..." value={search} onChange={(event) => onSearch(event.target.value)} /></label></div>
         <div className="table-wrap">
           <table className="request-table teacher-table">
-            <thead><tr><th>TEACHER</th><th>SUBJECT SPECIALIZATIONS</th><th>TEACHING LOAD</th><th>SUB LOAD</th><th>STATUS</th><th /></tr></thead>
+            <thead><tr><th>TEACHER</th><th>SUBJECT SPECIALIZATIONS</th><th>LEVEL / QUALIFICATION</th><th>SUB LOAD</th><th>STATUS</th><th /></tr></thead>
             <tbody>{visibleTeachers.map((teacher) => <tr key={teacher.id}>
               <td><div className="table-teacher"><span className="teacher-avatar" style={{ backgroundColor: teacher.color }}>{teacher.initials}</span><div><strong>{teacher.name}</strong><small>{teacher.id}</small></div></div></td>
               <td><div className="subject-tags">{teacher.specializations.map((subject) => <span key={subject}>{subject}</span>)}</div></td>
-              <td><span className="load-value">{teacher.teachingLoad}<small> / 30 hrs</small></span><div className="load-track"><span style={{ width: `${Math.min(100, teacher.teachingLoad / 30 * 100)}%` }} /></div></td>
+              <td>{teacher.qualification}</td>
               <td><span className="sub-load">{teacher.currentSubLoad}<small> / 3</small></span></td>
               <td><span className={`status-tag ${teacher.status === "available" ? "status-confirmed" : "status-unfilled"}`}><span className="status-dot" />{teacher.status === "available" ? "Available" : teacher.status === "on_leave" ? "On leave" : "Inactive"}</span></td>
               <td><button className="edit-teacher-button" onClick={() => onEdit(teacher)} aria-label={`Edit ${teacher.name}`}><Icon name="settings" size={15} /> Edit</button></td>

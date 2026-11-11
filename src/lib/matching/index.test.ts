@@ -33,6 +33,7 @@ const teacher = (id: string, overrides: Partial<Teacher> = {}): Teacher => ({
   status: "available",
   specializations: ["Physics"],
   timetable: [],
+  qualification: "Bachelor's degree",
   teachingLoad: 20,
   currentSubLoad: 0,
   honorariumRate: 100,
