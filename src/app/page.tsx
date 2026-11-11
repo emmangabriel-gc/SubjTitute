@@ -1,0 +1,1382 @@
+"use client";
+
+import type { FormEvent, ReactNode } from "react";
+import { useMemo, useState } from "react";
+import { classRequests, teachers } from "@/lib/demo-data";
+import { matchSubstitutes, overlaps } from "@/lib/matching";
+import type { ClassRequest, MatchResult, Teacher } from "@/lib/matching/types";
+
+type View = "Overview" | "Absences" | "Teachers" | "Match results" | "Settings";
+type IconName =
+  | "grid"
+  | "calendar"
+  | "users"
+  | "sparkles"
+  | "settings"
+  | "search"
+  | "bell"
+  | "arrow"
+  | "plus"
+  | "check"
+  | "clock"
+  | "chart"
+  | "chevron"
+  | "x"
+  | "filter"
+  | "book"
+  | "coin"
+  | "trend"
+  | "shield"
+  | "menu";
+
+const subjectOptions = [
+  "General Mathematics",
+  "Statistics and Probability",
+  "Pre-Calculus",
+  "Basic Calculus",
+  "Earth Science",
+  "Physics",
+  "Chemistry",
+  "Biology",
+  "Oral Communication",
+  "Reading and Writing",
+  "Computer Systems Servicing",
+  "Programming",
+  "Empowerment Technologies",
+];
+const weekDays = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+const teacherColors = [
+  "#d9ff91",
+  "#ffe6b5",
+  "#ffd9df",
+  "#dceeff",
+  "#e7e1ff",
+  "#e4f9ec",
+];
+
+const iconArtwork: Record<IconName, ReactNode> = {
+  grid: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>,
+  calendar: <><rect x="3" y="5" width="18" height="16" rx="2.5" /><path d="M7 3v4M17 3v4M3 10h18" /></>,
+  users: <><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="10" cy="7" r="4" /><path d="M20 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></>,
+  sparkles: <><path d="m12 3 1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2L12 3Z" /><path d="m19 14 1.1 2.9L23 18l-2.9 1.1L19 22l-1.1-2.9L15 18l2.9-1.1L19 14ZM5 2l.8 2.2L8 5l-2.2.8L5 8l-.8-2.2L2 5l2.2-.8L5 2Z" /></>,
+  settings: <><circle cx="12" cy="12" r="3" /><path d="m19.4 15 .1.1 1.4 1.1-1.4 2.4-1.7-.7a8 8 0 0 1-1.8 1l-.3 1.8h-2.8l-.3-1.8a8 8 0 0 1-1.8-1l-1.7.7-1.4-2.4L7.1 15a8 8 0 0 1 0-2l-1.4-1.1 1.4-2.4 1.7.7a8 8 0 0 1 1.8-1l.3-1.8h2.8l.3 1.8a8 8 0 0 1 1.8 1l1.7-.7 1.4 2.4-1.4 1.1a8 8 0 0 1-.1 2Z" /></>,
+  search: <><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 4.5 4.5" /></>,
+  bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M10 21h4" /></>,
+  arrow: <><path d="M5 12h14M13 6l6 6-6 6" /></>,
+  plus: <><path d="M12 5v14M5 12h14" /></>,
+  check: <path d="m5 12 4 4L19 6" />,
+  clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+  chart: <><path d="M3 3v18h18M8 15l4-4 3 3 6-7" /></>,
+  chevron: <path d="m9 18 6-6-6-6" />,
+  x: <><path d="m18 6-12 12M6 6l12 12" /></>,
+  filter: <><path d="M4 7h16M7 12h10M10 17h4" /><circle cx="8" cy="7" r="1.5" /><circle cx="15" cy="12" r="1.5" /></>,
+  book: <><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v17H6.5A2.5 2.5 0 0 0 4 22V5.5Z" /><path d="M4 18a2.5 2.5 0 0 1 2.5-2.5H20M8 7h8" /></>,
+  coin: <><ellipse cx="12" cy="6" rx="8" ry="3" /><path d="M4 6v5c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 11v5c0 1.7 3.6 3 8 3s8-1.3 8-3v-5" /></>,
+  trend: <><path d="m3 17 6-6 4 4 8-8" /><path d="M15 7h6v6" /></>,
+  shield: <><path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11Z" /><path d="m9 12 2 2 4-4" /></>,
+  menu: <><path d="M4 6h16M4 12h16M4 18h16" /></>,
+};
+
+function Icon({
+  name,
+  size = 20,
+}: {
+  name: IconName;
+  size?: number;
+}) {
+  return (
+    <svg
+      aria-hidden="true"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {iconArtwork[name]}
+    </svg>
+  );
+}
+
+function formatTime(minutes: number): string {
+  const hour = Math.floor(minutes / 60);
+  const minute = minutes % 60;
+  const displayHour = hour % 12 || 12;
+  return `${displayHour}:${String(minute).padStart(2, "0")} ${hour < 12 ? "AM" : "PM"}`;
+}
+
+function formatPeriod(request: ClassRequest): string {
+  return `${formatTime(request.slot.start)} – ${formatTime(request.slot.end)}`;
+}
+
+function formatDate(value: string): string {
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(`${value}T00:00:00`));
+}
+
+function formatDateRange(request: ClassRequest): string | null {
+  const { dateFrom, dateTo } = request.slot;
+  if (!dateFrom || !dateTo) return null;
+  return `${formatDate(dateFrom)} – ${formatDate(dateTo)} · ${request.slot.day}`;
+}
+
+function dateRangeIncludesWeekday(
+  dateFrom: string,
+  dateTo: string,
+  day: string,
+): boolean {
+  const dayIndex = weekDays.indexOf(day) + 1;
+  const start = new Date(`${dateFrom}T00:00:00Z`);
+  const end = new Date(`${dateTo}T00:00:00Z`);
+  const daysUntilOccurrence = (dayIndex - start.getUTCDay() + 7) % 7;
+  start.setUTCDate(start.getUTCDate() + daysUntilOccurrence);
+  return start <= end;
+}
+
+function updateMatchResult(
+  teachers: Teacher[],
+  requests: ClassRequest[],
+  previous: MatchResult,
+): MatchResult {
+  const pendingRequests = requests.filter((request) => request.status === "open");
+  const pendingResult = matchSubstitutes(teachers, pendingRequests);
+  const pinnedRequests = requests.filter(
+    (request) => request.status === "confirmed" && previous.assignments[request.id],
+  );
+  return {
+    assignments: {
+      ...Object.fromEntries(
+        pinnedRequests.map((request) => [
+          request.id,
+          previous.assignments[request.id],
+        ]),
+      ),
+      ...pendingResult.assignments,
+    },
+    unfilled: pendingResult.unfilled,
+    classRankings: {
+      ...Object.fromEntries(
+        pinnedRequests.map((request) => [
+          request.id,
+          previous.classRankings[request.id] ?? [],
+        ]),
+      ),
+      ...pendingResult.classRankings,
+    },
+    explanations: {
+      ...Object.fromEntries(
+        pinnedRequests.map((request) => [
+          request.id,
+          previous.explanations[request.id] ?? {},
+        ]),
+      ),
+      ...pendingResult.explanations,
+    },
+    candidateExplanations: {
+      ...Object.fromEntries(
+        pinnedRequests.map((request) => [
+          request.id,
+          previous.candidateExplanations[request.id] ?? {},
+        ]),
+      ),
+      ...pendingResult.candidateExplanations,
+    },
+  };
+}
+
+function isTeacherTimetable(value: unknown): value is Teacher["timetable"] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (slot: unknown) =>
+        typeof slot === "object" &&
+        slot !== null &&
+        "day" in slot &&
+        "start" in slot &&
+        "end" in slot &&
+        typeof slot.day === "string" &&
+        typeof slot.start === "number" &&
+        typeof slot.end === "number" &&
+        (!("dateFrom" in slot) || typeof slot.dateFrom === "string") &&
+        (!("dateTo" in slot) || typeof slot.dateTo === "string"),
+    )
+  );
+}
+
+export default function Home() {
+  const [activeView, setActiveView] = useState<View>("Overview");
+  const [requests, setRequests] = useState<ClassRequest[]>(classRequests);
+  const [teacherRecords, setTeacherRecords] = useState(teachers);
+  const [search, setSearch] = useState("");
+  const [hasRun, setHasRun] = useState(false);
+  const [computeMillis, setComputeMillis] = useState(0);
+  const [result, setResult] = useState<MatchResult>(() =>
+    matchSubstitutes(teachers, classRequests),
+  );
+  const [confirmed, setConfirmed] = useState<string[]>([]);
+  const [showAbsenceForm, setShowAbsenceForm] = useState(false);
+  const [showTeacherForm, setShowTeacherForm] = useState(false);
+  const [editingTeacher, setEditingTeacher] = useState<Teacher | null>(null);
+  const [notice, setNotice] = useState("");
+
+  const openRequests = requests.filter((request) => request.status === "open");
+  const filteredTeachers = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return teacherRecords.filter(
+      (teacher) =>
+        !query ||
+        teacher.name.toLowerCase().includes(query) ||
+        teacher.specializations.some((subject) =>
+          subject.toLowerCase().includes(query),
+        ),
+    );
+  }, [search, teacherRecords]);
+
+  function runMatching(nextTeachers = teacherRecords, navigateToResults = true) {
+    const start = performance.now();
+    const nextResult = updateMatchResult(nextTeachers, requests, result);
+    const duration = Math.max(1, Math.round(performance.now() - start));
+    setResult(nextResult);
+    setComputeMillis(duration);
+    setHasRun(true);
+    if (navigateToResults) setActiveView("Match results");
+    setNotice(`Matching complete · ${duration} ms`);
+    window.setTimeout(() => setNotice(""), 3200);
+  }
+
+  function selectAlternative(requestId: string, teacherId: string) {
+    const request = requests.find((item) => item.id === requestId);
+    const teacher = teacherRecords.find((item) => item.id === teacherId);
+    if (
+      !request ||
+      !teacher ||
+      request.status !== "open" ||
+      !result.classRankings[requestId]?.some(([candidateId]) => candidateId === teacherId)
+    ) {
+      setNotice("That teacher is no longer an eligible option. Run matching again.");
+      window.setTimeout(() => setNotice(""), 3200);
+      return;
+    }
+
+    const otherAssignments = requests.filter(
+      (item) =>
+        item.id !== requestId &&
+        result.assignments[item.id] === teacherId,
+    );
+    const openLoad = otherAssignments.filter(
+      (item) => item.status !== "confirmed",
+    ).length;
+    const hasScheduleConflict =
+      teacher.timetable.some((slot) => overlaps(request.slot, slot)) ||
+      otherAssignments.some((item) => overlaps(request.slot, item.slot));
+    if (
+      teacher.currentSubLoad + openLoad >= 3 ||
+      hasScheduleConflict
+    ) {
+      setNotice(
+        `${teacher.name} cannot take this class because of workload or a time conflict.`,
+      );
+      window.setTimeout(() => setNotice(""), 3200);
+      return;
+    }
+
+    const breakdown = result.candidateExplanations[requestId]?.[teacherId];
+    if (!breakdown) {
+      setNotice("Run matching again to refresh this teacher’s score breakdown.");
+      window.setTimeout(() => setNotice(""), 3200);
+      return;
+    }
+    setResult((current) => ({
+      ...current,
+      assignments: { ...current.assignments, [requestId]: teacherId },
+      explanations: { ...current.explanations, [requestId]: breakdown },
+    }));
+    setNotice(`${teacher.name} selected. Confirm the recommendation to assign.`);
+    window.setTimeout(() => setNotice(""), 3200);
+  }
+
+  function confirmMatch(requestId: string) {
+    const teacherId = result.assignments[requestId];
+    const confirmedRequest = requests.find((request) => request.id === requestId);
+    if (!teacherId || !confirmedRequest || confirmed.includes(requestId)) return;
+    setConfirmed((current) =>
+      current.includes(requestId) ? current : [...current, requestId],
+    );
+    setRequests((current) =>
+      current.map((request) =>
+        request.id === requestId
+          ? { ...request, status: "confirmed" }
+          : request,
+      ),
+    );
+    setTeacherRecords((current) =>
+      current.map((teacher) =>
+        teacher.id === teacherId
+          ? {
+              ...teacher,
+              currentSubLoad: teacher.currentSubLoad + 1,
+              timetable: [...teacher.timetable, confirmedRequest.slot],
+            }
+          : teacher,
+      ),
+    );
+    setNotice("Recommendation confirmed and saved.");
+    window.setTimeout(() => setNotice(""), 3200);
+  }
+
+  function addAbsence(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const subject = String(formData.get("subject") ?? "").trim();
+    const section = String(formData.get("section") ?? "").trim();
+    const startHour = Number(formData.get("startHour"));
+    const endHour = Number(formData.get("endHour"));
+    const budgetCap = Number(formData.get("budgetCap"));
+    const absentTeacher = String(formData.get("absentTeacher") ?? "").trim();
+    const dateFrom = String(formData.get("dateFrom") ?? "");
+    const dateTo = String(formData.get("dateTo") ?? "");
+    const day = String(formData.get("day") ?? "");
+    if (
+      !subject ||
+      !section ||
+      !absentTeacher ||
+      !dateFrom ||
+      !dateTo ||
+      dateTo < dateFrom ||
+      !weekDays.includes(day) ||
+      !dateRangeIncludesWeekday(dateFrom, dateTo, day) ||
+      !Number.isFinite(startHour) ||
+      !Number.isFinite(endHour) ||
+      endHour <= startHour ||
+      !Number.isFinite(budgetCap) ||
+      budgetCap < 0
+    ) {
+      setNotice("Please enter valid absence details.");
+      return;
+    }
+
+    const nextRequest: ClassRequest = {
+      id: `C${String(
+        requests.reduce((max, request) => {
+          const number = Number(request.id.replace(/\D/g, ""));
+          return Number.isFinite(number) ? Math.max(max, number) : max;
+        }, 0) + 1,
+      ).padStart(2, "0")}`,
+      subject,
+      slot: {
+        day,
+        start: startHour * 60,
+        end: endHour * 60,
+        dateFrom,
+        dateTo,
+      },
+      gradeLevel: Number(formData.get("gradeLevel")),
+      section,
+      minutesUntilStart: 120,
+      budgetCap,
+      absentTeacherId: absentTeacher,
+      status: "open",
+    };
+    setRequests((current) => [...current, nextRequest]);
+    setShowAbsenceForm(false);
+    setActiveView("Absences");
+    setNotice("Absence reported. It is ready to be matched.");
+    window.setTimeout(() => setNotice(""), 3200);
+  }
+
+  function saveTeacher(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const name = String(formData.get("name") ?? "").trim();
+    const specializations = formData
+      .getAll("specializations")
+      .map(String)
+      .filter((subject) => subjectOptions.includes(subject));
+    const status = String(formData.get("status") ?? "");
+    const teachingLoad = Number(formData.get("teachingLoad"));
+    const honorariumRate = Number(formData.get("honorariumRate"));
+    const requiredPrepMinutes = Number(formData.get("requiredPrepMinutes"));
+    let parsedTimetable: unknown;
+    let subjectPreferences: string[];
+    let preferredGrades: number[];
+    let preferredPeriods: Teacher["preferredPeriods"];
+    try {
+      parsedTimetable = JSON.parse(String(formData.get("timetable") ?? "[]"));
+      subjectPreferences = String(formData.get("subjectPreferences") ?? "")
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+      preferredGrades = formData
+        .getAll("preferredGrades")
+        .map(Number)
+        .filter((grade) => grade === 11 || grade === 12);
+      preferredPeriods = formData
+        .getAll("preferredPeriods")
+        .map(String)
+        .filter((period): period is "AM" | "PM" => period === "AM" || period === "PM");
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        setNotice("Please check the teacher details and timetable.");
+        return;
+      }
+      throw error;
+    }
+    if (
+      !isTeacherTimetable(parsedTimetable) ||
+      subjectPreferences.some((subject) => !subjectOptions.includes(subject))
+    ) {
+      setNotice("Use listed subjects in the preference order and enter valid timetable periods.");
+      return;
+    }
+    const timetable = parsedTimetable;
+    if (
+      !name ||
+      specializations.length === 0 ||
+      (status !== "available" && status !== "on_leave" && status !== "inactive") ||
+      !Number.isFinite(teachingLoad) ||
+      teachingLoad < 0 ||
+      teachingLoad > 30 ||
+      !Number.isFinite(honorariumRate) ||
+      honorariumRate < 0 ||
+      !Number.isInteger(requiredPrepMinutes) ||
+      requiredPrepMinutes < 0 ||
+      timetable.some(
+        (slot) =>
+          !weekDays.includes(slot.day) ||
+          !Number.isFinite(slot.start) ||
+          !Number.isFinite(slot.end) ||
+          slot.start < 0 ||
+          slot.end > 24 * 60 ||
+          slot.end <= slot.start,
+      ) ||
+      timetable.some((slot, index) =>
+        timetable
+          .slice(index + 1)
+          .some((other) => overlaps(slot, other)),
+      )
+    ) {
+      setNotice("Please check the teacher details and required fields.");
+      return;
+    }
+
+    const initials = name
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join("");
+    const nextNumber = teacherRecords.reduce((max, teacher) => {
+      const number = Number(teacher.id.replace(/\D/g, ""));
+      return Number.isFinite(number) ? Math.max(max, number) : max;
+    }, 0) + 1;
+    const savedTeacher: Teacher = {
+      id: editingTeacher?.id ?? `T${String(nextNumber).padStart(2, "0")}`,
+      name,
+      initials,
+      color: editingTeacher?.color ?? teacherColors[(nextNumber - 1) % teacherColors.length],
+      status,
+      specializations,
+      timetable,
+      teachingLoad,
+      currentSubLoad: editingTeacher?.currentSubLoad ?? 0,
+      honorariumRate,
+      requiredPrepMinutes,
+      subjectPreferences,
+      preferredGrades,
+      preferredPeriods,
+    };
+    const updatedTeachers = editingTeacher
+      ? teacherRecords.map((teacher) =>
+          teacher.id === editingTeacher.id ? savedTeacher : teacher,
+        )
+      : [...teacherRecords, savedTeacher];
+    setTeacherRecords(updatedTeachers);
+    runMatching(updatedTeachers, false);
+    setShowTeacherForm(false);
+    setEditingTeacher(null);
+    setActiveView("Teachers");
+    setNotice(
+      editingTeacher
+        ? `${name}’s details updated and open requests rematched.`
+        : `${name} added and open requests rematched.`,
+    );
+    window.setTimeout(() => setNotice(""), 3200);
+  }
+
+  const navigation: Array<{ label: View; icon: IconName; badge?: number }> = [
+    { label: "Overview", icon: "grid" },
+    { label: "Absences", icon: "calendar", badge: openRequests.length },
+    { label: "Teachers", icon: "users" },
+    { label: "Match results", icon: "sparkles" },
+  ];
+
+  return (
+    <div className="app-shell">
+      <aside className="sidebar">
+        <a
+          className="brand"
+          href="#overview"
+          onClick={(event) => {
+            event.preventDefault();
+            setActiveView("Overview");
+          }}
+        >
+          <span className="brand-mark">s.</span>
+          <span className="brand-name">subjtitute<span>.</span></span>
+        </a>
+
+        <div className="school-switcher">
+          <div className="school-avatar">S</div>
+          <div className="school-copy">
+            <span className="school-label">SCHOOL</span>
+            <strong>Northview Senior High</strong>
+          </div>
+          <Icon name="chevron" size={16} />
+        </div>
+
+        <div className="nav-caption">WORKSPACE</div>
+        <nav className="primary-nav" aria-label="Main navigation">
+          {navigation.map((item) => (
+            <button
+              className={`nav-item ${activeView === item.label ? "active" : ""}`}
+              key={item.label}
+              onClick={() => setActiveView(item.label)}
+              aria-label={item.label}
+              aria-current={activeView === item.label ? "page" : undefined}
+              title={item.label}
+            >
+              <Icon name={item.icon} size={19} />
+              <span>{item.label}</span>
+              {item.badge ? <span className="nav-badge">{item.badge}</span> : null}
+            </button>
+          ))}
+        </nav>
+
+        <div className="nav-caption nav-caption-settings">PREFERENCES</div>
+        <button
+          className={`nav-item ${activeView === "Settings" ? "active" : ""}`}
+          onClick={() => setActiveView("Settings")}
+          aria-label="Settings"
+          aria-current={activeView === "Settings" ? "page" : undefined}
+          title="Settings"
+        >
+          <Icon name="settings" size={19} />
+          <span>Settings</span>
+        </button>
+
+        <div className="sidebar-bottom">
+          <div className="help-card">
+            <div className="help-icon"><Icon name="book" size={19} /></div>
+            <strong>Need a hand?</strong>
+            <p>Learn how matching works and what each score means.</p>
+            <button onClick={() => setActiveView("Settings")}>
+              Read the guide <Icon name="arrow" size={15} />
+            </button>
+          </div>
+          <div className="profile">
+            <div className="profile-avatar">AD</div>
+            <div className="profile-copy">
+              <strong>Alexandra Diaz</strong>
+              <span>School administrator</span>
+            </div>
+            <button className="profile-more" aria-label="Profile options">···</button>
+          </div>
+        </div>
+      </aside>
+
+      <main className="main-area">
+        <header className="topbar">
+          <div className="mobile-brand"><span className="brand-mark">s.</span> subjtitute.</div>
+          <div className="breadcrumb"><span>Workspace</span><Icon name="chevron" size={14} /><strong>{activeView}</strong></div>
+          <div className="topbar-actions">
+            <label className="search-box">
+              <Icon name="search" size={18} />
+              <input
+                aria-label="Search teachers or subjects"
+                placeholder="Search anything..."
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+              <kbd>⌘ K</kbd>
+            </label>
+            <button className="icon-button notification-button" aria-label="Notifications">
+              <Icon name="bell" size={19} /><span className="notification-dot" />
+            </button>
+            <div className="topbar-avatar">AD</div>
+          </div>
+        </header>
+
+        <div className="page-content">
+          {activeView === "Overview" && (
+            <Overview
+              teachers={teacherRecords}
+              requests={requests}
+              result={result}
+              confirmed={confirmed}
+              onReport={() => setShowAbsenceForm(true)}
+              onRun={runMatching}
+              onConfirm={confirmMatch}
+              onNavigate={setActiveView}
+              hasRun={hasRun}
+              computeMillis={computeMillis}
+            />
+          )}
+          {activeView === "Absences" && (
+            <Absences
+              teachers={teacherRecords}
+              requests={requests}
+              result={result}
+              confirmed={confirmed}
+              onReport={() => setShowAbsenceForm(true)}
+              onRun={runMatching}
+              onConfirm={confirmMatch}
+            />
+          )}
+          {activeView === "Teachers" && (
+            <TeachersDirectory
+              teachers={filteredTeachers}
+              search={search}
+              onAdd={() => {
+                setEditingTeacher(null);
+                setShowTeacherForm(true);
+              }}
+              onEdit={(teacher) => {
+                setEditingTeacher(teacher);
+                setShowTeacherForm(true);
+              }}
+            />
+          )}
+          {activeView === "Match results" && (
+            <MatchResults
+              teachers={teacherRecords}
+              requests={requests}
+              result={result}
+              confirmed={confirmed}
+              onConfirm={confirmMatch}
+              onSelectAlternative={selectAlternative}
+              onRun={runMatching}
+              computeMillis={computeMillis}
+              hasRun={hasRun}
+            />
+          )}
+          {activeView === "Settings" && <Settings />}
+        </div>
+      </main>
+
+      <nav className="mobile-nav" aria-label="Mobile navigation">
+        {[...navigation, { label: "Settings" as const, icon: "settings" as const }].map((item) => (
+          <button
+            key={item.label}
+            className={activeView === item.label ? "active" : ""}
+            onClick={() => setActiveView(item.label)}
+            aria-label={item.label}
+            aria-current={activeView === item.label ? "page" : undefined}
+          >
+            <Icon name={item.icon} size={18} />
+            <span>{item.label === "Match results" ? "Matches" : item.label}</span>
+          </button>
+        ))}
+      </nav>
+
+      {notice && <div className="toast"><span className="toast-check"><Icon name="check" size={15} /></span>{notice}</div>}
+      {showAbsenceForm && (
+        <div className="modal-backdrop" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setShowAbsenceForm(false);
+        }}>
+          <form className="absence-modal" onSubmit={addAbsence}>
+            <div className="modal-heading">
+              <div><span className="eyebrow">NEW REQUEST</span><h2>Report an absence</h2></div>
+              <button type="button" className="icon-button" aria-label="Close dialog" onClick={() => setShowAbsenceForm(false)}><Icon name="x" /></button>
+            </div>
+            <p className="modal-copy">Set the class period and how long the teacher will be away. The class repeats on its selected weekday within these dates.</p>
+            <label className="field-label">Absent teacher<input required name="absentTeacher" placeholder="e.g. Ms. Villareal" /></label>
+            <label className="field-label">Subject
+              <select name="subject" defaultValue="Earth Science">
+                {subjectOptions.map((subject) => <option key={subject}>{subject}</option>)}
+              </select>
+            </label>
+            <div className="form-grid">
+              <label className="field-label">Grade<select name="gradeLevel" defaultValue="11"><option value="11">Grade 11</option><option value="12">Grade 12</option></select></label>
+              <label className="field-label">Section<input required name="section" placeholder="STEM A" /></label>
+            </div>
+            <div className="form-grid">
+              <label className="field-label">First day absent<input required name="dateFrom" type="date" /></label>
+              <label className="field-label">Last day absent<input required name="dateTo" type="date" /></label>
+            </div>
+            <label className="field-label">Class weekday<select name="day" defaultValue="Mon">{weekDays.map((day) => <option key={day} value={day}>{day}</option>)}</select></label>
+            <div className="form-grid">
+              <label className="field-label">Start hour<select name="startHour" defaultValue="9">{Array.from({ length: 10 }, (_, index) => index + 7).map((hour) => <option key={hour} value={hour}>{formatTime(hour * 60)}</option>)}</select></label>
+              <label className="field-label">End hour<select name="endHour" defaultValue="10">{Array.from({ length: 10 }, (_, index) => index + 8).map((hour) => <option key={hour} value={hour}>{formatTime(hour * 60)}</option>)}</select></label>
+            </div>
+            <label className="field-label">Honorarium budget<input required name="budgetCap" type="number" min="0" defaultValue="200" /></label>
+            <div className="modal-footer"><button type="button" className="button button-quiet" onClick={() => setShowAbsenceForm(false)}>Cancel</button><button type="submit" className="button button-primary"><Icon name="plus" size={17} /> Create request</button></div>
+          </form>
+        </div>
+      )}
+      {showTeacherForm && (
+        <TeacherForm
+          teacher={editingTeacher}
+          onSubmit={saveTeacher}
+          onClose={() => {
+            setShowTeacherForm(false);
+            setEditingTeacher(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function PageHeading({
+  eyebrow,
+  title,
+  description,
+  actions,
+}: {
+  eyebrow: string;
+  title: ReactNode;
+  description: string;
+  actions?: ReactNode;
+}) {
+  return (
+    <div className="page-heading">
+      <div>
+        <div className="eyebrow">{eyebrow}</div>
+        <h1>{title}</h1>
+        <p>{description}</p>
+      </div>
+      {actions && <div className="heading-actions">{actions}</div>}
+    </div>
+  );
+}
+
+function Button({
+  children,
+  variant = "primary",
+  onClick,
+}: {
+  children: ReactNode;
+  variant?: "primary" | "secondary" | "quiet";
+  onClick: () => void;
+}) {
+  return <button className={`button button-${variant}`} onClick={onClick}>{children}</button>;
+}
+
+function Overview({
+  teachers: teacherRecords,
+  requests,
+  result,
+  confirmed,
+  onReport,
+  onRun,
+  onConfirm,
+  onNavigate,
+  hasRun,
+  computeMillis,
+}: {
+  teachers: typeof teachers;
+  requests: ClassRequest[];
+  result: MatchResult;
+  confirmed: string[];
+  onReport: () => void;
+  onRun: () => void;
+  onConfirm: (requestId: string) => void;
+  onNavigate: (view: View) => void;
+  hasRun: boolean;
+  computeMillis: number;
+}) {
+  const unconfirmed = requests.filter(
+    (request) => result.assignments[request.id] && !confirmed.includes(request.id),
+  );
+  const openCount = requests.filter((request) => request.status === "open").length;
+  const fillRate = requests.length
+    ? Math.round((Object.keys(result.assignments).length / requests.length) * 100)
+    : 0;
+  const average = averageMatchScore(result);
+  return (
+    <>
+      <PageHeading
+        eyebrow="SAMPLE SCHOOL DAY · MONDAY SCHEDULE"
+        title={<>Good morning, Alexandra <span className="wave">✳</span></>}
+        description="Here’s what’s happening across your school today."
+        actions={<><Button variant="secondary" onClick={onReport}><Icon name="plus" size={17} /> Report absence</Button><Button onClick={onRun}><Icon name="sparkles" size={17} /> Run matching</Button></>}
+      />
+      <section className="stats-grid" aria-label="School overview">
+        <StatCard label="Open requests" value={String(openCount).padStart(2, "0")} change="For Monday" icon="calendar" tone="yellow" />
+        <StatCard label="Available teachers" value={String(teacherRecords.filter((teacher) => teacher.status === "available").length)} change={`of ${teacherRecords.length} teachers`} icon="users" tone="mint" />
+        <StatCard label="Classes covered" value={`${fillRate}%`} change={hasRun ? `${matchedCountLabel(result)} recommendations` : "Ready to match"} icon="chart" tone="blue" />
+        <StatCard label="Avg. match score" value={average === null ? "—" : String(average)} suffix={average === null ? "" : "%"} change={average === null ? "Run matching to calculate" : "Based on current recommendations"} icon="trend" tone="pink" />
+      </section>
+
+      <section className="overview-grid">
+        <div className="panel request-panel">
+          <div className="panel-heading">
+            <div><div className="panel-title-row"><h2>Today’s absences</h2><span className="count-pill">{requests.length}</span></div><p>Requests that need a subject-fit substitute.</p></div>
+            <button className="text-link" onClick={() => onNavigate("Absences")}>View all <Icon name="arrow" size={15} /></button>
+          </div>
+          <RequestTable teachers={teacherRecords} requests={requests.slice(0, 4)} result={result} confirmed={confirmed} compact />
+          <button className="panel-footer-link" onClick={() => onNavigate("Absences")}>See all absence requests <Icon name="arrow" size={16} /></button>
+        </div>
+
+        <div className="panel matching-panel">
+          <div className="panel-heading">
+            <div><div className="eyebrow">MATCH OVERVIEW</div><h2 className="matching-title">{hasRun ? "Looking good." : "Ready when you are."}</h2><p>{hasRun ? "Your latest run found a cover for every class." : "Run the algorithm to get explainable recommendations."}</p></div>
+            <div className="match-orb"><Icon name="sparkles" size={21} /></div>
+          </div>
+          <div className="coverage-progress">
+            <div className="coverage-label"><span>Coverage rate</span><strong>{fillRate}%</strong></div>
+            <div className="progress-track"><span style={{ width: `${fillRate}%` }} /></div>
+            <div className="progress-meta"><span>{Object.keys(result.assignments).length} classes matched</span><span>{result.unfilled.length} unfilled</span></div>
+          </div>
+          <div className="run-meta">
+            <span className="run-status-dot" /> {hasRun ? `Last run just now · ${computeMillis} ms` : "No runs yet today"}
+            <button className="round-arrow" aria-label="View match results" onClick={() => onNavigate("Match results")}><Icon name="arrow" size={17} /></button>
+          </div>
+        </div>
+      </section>
+
+      <section className="panel recommendations-panel">
+        <div className="panel-heading">
+          <div><div className="panel-title-row"><h2>Needs your approval</h2><span className="count-pill count-pill-coral">{unconfirmed.length}</span></div><p>Review and confirm recommended substitutes.</p></div>
+          <button className="text-link" onClick={() => onNavigate("Match results")}>All recommendations <Icon name="arrow" size={15} /></button>
+        </div>
+        {unconfirmed.length ? (
+          <div className="recommendation-list">
+            {unconfirmed.slice(0, 3).map((request) => {
+              const teacher = teacherRecords.find((item) => item.id === result.assignments[request.id]);
+              return (
+                <div className="recommendation-row" key={request.id}>
+                  <div className="subject-badge">{request.subject.slice(0, 2).toUpperCase()}</div>
+                  <div className="recommendation-class"><strong>{request.subject}</strong><span>Grade {request.gradeLevel} · {request.section} · {formatPeriod(request)}</span></div>
+                  <div className="recommendation-arrow"><Icon name="arrow" size={16} /></div>
+                  <div className="teacher-avatar" style={{ backgroundColor: teacher?.color }}>{teacher?.initials ?? "—"}</div>
+                  <div className="recommendation-teacher"><strong>{teacher?.name ?? "No match"}</strong><span>{teacher?.specializations[0] ?? "Try another request"}</span></div>
+                  <Score value={result.classRankings[request.id]?.find(([id]) => id === teacher?.id)?.[1] ?? 0} />
+                  <Button variant="secondary" onClick={() => onConfirm(request.id)}><Icon name="check" size={16} /> Confirm</Button>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="empty-state"><span className="empty-icon"><Icon name="check" size={20} /></span><strong>All caught up</strong><span>Run matching to see recommendations waiting for approval.</span></div>
+        )}
+      </section>
+
+      <div className="bottom-grid">
+        <div className="mini-panel mini-panel-tip"><div className="tip-icon"><Icon name="shield" size={19} /></div><div><strong>Fair, explainable matches</strong><p>Every recommendation considers expertise, workload, schedule, and preferences.</p></div><button aria-label="Learn about matching" onClick={() => onNavigate("Settings")}><Icon name="chevron" size={18} /></button></div>
+        <div className="mini-panel mini-panel-color"><div className="mini-chart"><span /><span /><span /><span /><span /><span /><span /></div><div><strong>Smarter coverage, together</strong><p>Matching adapts to your school’s current policies.</p></div><span className="mini-sparkle">✳</span></div>
+      </div>
+    </>
+  );
+}
+
+function matchedCountLabel(result: MatchResult): string {
+  const count = Object.keys(result.assignments).length;
+  return `${count} ${count === 1 ? "match" : "matches"}`;
+}
+
+function averageMatchScore(result: MatchResult): number | null {
+  const scores = Object.entries(result.assignments)
+    .map(([requestId, teacherId]) =>
+      result.classRankings[requestId]?.find(([rankedTeacherId]) => rankedTeacherId === teacherId)?.[1],
+    )
+    .filter((score): score is number => score !== undefined);
+  if (scores.length === 0) return null;
+  return Math.round((scores.reduce((total, score) => total + score, 0) / scores.length) * 100);
+}
+
+function StatCard({
+  label,
+  value,
+  change,
+  icon,
+  tone,
+  suffix,
+}: {
+  label: string;
+  value: string;
+  change: string;
+  icon: IconName;
+  tone: string;
+  suffix?: string;
+}) {
+  return (
+    <div className="stat-card">
+      <div className="stat-top"><span>{label}</span><span className={`stat-icon ${tone}`}><Icon name={icon} size={18} /></span></div>
+      <div className="stat-value">{value}<small>{suffix}</small></div>
+      <div className={`stat-change ${tone === "pink" ? "neutral-change" : ""}`}>{tone === "pink" ? <Icon name="trend" size={13} /> : <span className="change-dot" />}{change}</div>
+    </div>
+  );
+}
+
+function Score({ value }: { value: number }) {
+  return <div className="score-pill"><span className="score-dot" />{Math.round(value * 100)}<small>%</small></div>;
+}
+
+function RequestTable({
+  teachers: teacherRecords,
+  requests,
+  result,
+  confirmed,
+  compact = false,
+  onConfirm,
+}: {
+  teachers: typeof teachers;
+  requests: ClassRequest[];
+  result: MatchResult;
+  confirmed: string[];
+  compact?: boolean;
+  onConfirm?: (requestId: string) => void;
+}) {
+  return (
+    <div className={`table-wrap ${compact ? "compact-table" : ""}`}>
+      <table className="request-table">
+        <thead><tr><th>CLASS / SUBJECT</th><th>TIME</th><th>RECOMMENDED TEACHER</th><th>MATCH</th>{!compact && <th>STATUS</th>}</tr></thead>
+        <tbody>
+          {requests.map((request) => {
+            const teacher = teacherRecords.find((item) => item.id === result.assignments[request.id]);
+            const matchScore = result.classRankings[request.id]?.find(([id]) => id === teacher?.id)?.[1] ?? 0;
+            const isConfirmed = confirmed.includes(request.id) || request.status === "confirmed";
+            return (
+              <tr key={request.id}>
+                <td><div className="class-cell"><span className="subject-badge">{request.subject.slice(0, 2).toUpperCase()}</span><div><strong>{request.subject}</strong><small>Grade {request.gradeLevel} · {request.section}</small></div></div></td>
+                <td><div className="time-cell-wrap"><span className="time-cell">{formatPeriod(request)}</span>{formatDateRange(request) && <small className="date-range">{formatDateRange(request)}</small>}</div></td>
+                <td>{teacher ? <div className="table-teacher"><span className="teacher-avatar small-avatar" style={{ backgroundColor: teacher.color }}>{teacher.initials}</span><strong>{teacher.name}</strong></div> : <span className="muted">No eligible match</span>}</td>
+                <td>{teacher ? <Score value={matchScore} /> : <span className="muted">—</span>}</td>
+                {!compact && <td>{isConfirmed ? <span className="status-tag status-confirmed"><Icon name="check" size={13} /> Confirmed</span> : teacher ? <button className="status-tag status-pending" onClick={() => onConfirm?.(request.id)}>Needs review <Icon name="arrow" size={13} /></button> : <span className="status-tag status-unfilled">Unfilled</span>}</td>}
+              </tr>
+            );
+          })}
+          {requests.length === 0 && <tr><td className="no-results" colSpan={compact ? 4 : 5}>No requests found. Report an absence to get started.</td></tr>}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function Absences({
+  teachers: teacherRecords,
+  requests,
+  result,
+  confirmed,
+  onReport,
+  onRun,
+  onConfirm,
+}: {
+  teachers: typeof teachers;
+  requests: ClassRequest[];
+  result: MatchResult;
+  confirmed: string[];
+  onReport: () => void;
+  onRun: () => void;
+  onConfirm: (requestId: string) => void;
+}) {
+  return (
+    <>
+      <PageHeading eyebrow="COVERAGE PLANNING" title="Absence requests" description="Keep every classroom covered with a qualified substitute." actions={<><Button variant="secondary" onClick={onReport}><Icon name="plus" size={17} /> Report absence</Button><Button onClick={onRun}><Icon name="sparkles" size={17} /> Run matching</Button></>} />
+      <div className="subpage-stats"><StatCard label="All requests" value={String(requests.length).padStart(2, "0")} change="For Monday" icon="calendar" tone="yellow" /><StatCard label="Waiting for approval" value={String(requests.filter((request) => !confirmed.includes(request.id)).length).padStart(2, "0")} change="Recommendations ready" icon="clock" tone="pink" /><StatCard label="Confirmed" value={String(confirmed.length).padStart(2, "0")} change="Substitutes assigned" icon="check" tone="mint" /></div>
+      <div className="panel directory-panel">
+        <div className="panel-heading"><div><h2>All class requests</h2><p>Review the recommended teacher and match confidence.</p></div><button className="filter-button"><Icon name="filter" size={17} /> All requests <Icon name="chevron" size={14} /></button></div>
+        <RequestTable teachers={teacherRecords} requests={requests} result={result} confirmed={confirmed} onConfirm={onConfirm} />
+        <div className="table-note"><Icon name="shield" size={16} /> Match scores reflect subject fit, workload, schedule, notice time, cost, and preferences.</div>
+      </div>
+    </>
+  );
+}
+
+function minutesToTime(minutes: number): string {
+  const hour = String(Math.floor(minutes / 60)).padStart(2, "0");
+  const minute = String(minutes % 60).padStart(2, "0");
+  return `${hour}:${minute}`;
+}
+
+function timeToMinutes(value: string): number {
+  const [hours, minutes] = value.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function TeacherForm({
+  teacher,
+  onSubmit,
+  onClose,
+}: {
+  teacher: Teacher | null;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onClose: () => void;
+}) {
+  const [timetable, setTimetable] = useState<Teacher["timetable"]>(
+    () => teacher?.timetable.map((slot) => ({ ...slot })) ?? [],
+  );
+  const selectedPreferences = teacher?.subjectPreferences.join(", ") ?? "";
+
+  function updateSlot(
+    index: number,
+    property: "day" | "start" | "end",
+    value: string,
+  ) {
+    setTimetable((current) =>
+      current.map((slot, slotIndex) =>
+        slotIndex === index
+          ? {
+              ...slot,
+              [property]:
+                property === "day"
+                  ? value
+                  : timeToMinutes(value),
+            }
+          : slot,
+      ),
+    );
+  }
+
+  return (
+    <div
+      className="modal-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <form className="absence-modal teacher-modal" onSubmit={onSubmit}>
+        <div className="modal-heading">
+          <div>
+            <span className="eyebrow">TEACHER DIRECTORY</span>
+            <h2>{teacher ? "Edit teacher details" : "Add a teacher"}</h2>
+          </div>
+          <button type="button" className="icon-button" aria-label="Close dialog" onClick={onClose}>
+            <Icon name="x" />
+          </button>
+        </div>
+        <p className="modal-copy">
+          Update expertise, preferences, workload, and timetable. Changes refresh open match recommendations.
+        </p>
+        <label className="field-label">
+          Teacher name
+          <input required name="name" defaultValue={teacher?.name ?? ""} placeholder="e.g. Alex Rivera" />
+        </label>
+        <fieldset className="subject-picker">
+          <legend>Subject specializations <span>Choose at least one</span></legend>
+          <div className="subject-check-grid">
+            {subjectOptions.map((subject) => (
+              <label key={subject}>
+                <input
+                  type="checkbox"
+                  name="specializations"
+                  value={subject}
+                  defaultChecked={teacher?.specializations.includes(subject) ?? false}
+                />
+                <span>{subject}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <div className="form-grid">
+          <label className="field-label">
+            Status
+            <select name="status" defaultValue={teacher?.status ?? "available"}>
+              <option value="available">Available</option>
+              <option value="on_leave">On leave</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </label>
+          <label className="field-label">
+            Weekly teaching load
+            <input required name="teachingLoad" type="number" min="0" max="30" step="0.5" defaultValue={teacher?.teachingLoad ?? 20} />
+          </label>
+        </div>
+        <div className="form-grid">
+          <label className="field-label">
+            Honorarium per class
+            <input required name="honorariumRate" type="number" min="0" step="1" defaultValue={teacher?.honorariumRate ?? 120} />
+          </label>
+          <label className="field-label">
+            Prep time (minutes)
+            <input required name="requiredPrepMinutes" type="number" min="0" step="1" defaultValue={teacher?.requiredPrepMinutes ?? 30} />
+          </label>
+        </div>
+        <label className="field-label">
+          Subject preference order
+          <input
+            name="subjectPreferences"
+            defaultValue={selectedPreferences}
+            placeholder="e.g. Physics, Chemistry"
+          />
+          <span className="field-hint">Separate subjects with commas; leave blank for no preference.</span>
+        </label>
+        <fieldset className="preference-picker">
+          <legend>Preferred grades and periods <span>Optional</span></legend>
+          <div className="preference-options">
+            {[11, 12].map((grade) => (
+              <label key={grade}>
+                <input
+                  type="checkbox"
+                  name="preferredGrades"
+                  value={grade}
+                  defaultChecked={teacher?.preferredGrades.includes(grade) ?? false}
+                />
+                <span>Grade {grade}</span>
+              </label>
+            ))}
+            {(["AM", "PM"] as const).map((period) => (
+              <label key={period}>
+                <input
+                  type="checkbox"
+                  name="preferredPeriods"
+                  value={period}
+                  defaultChecked={teacher?.preferredPeriods.includes(period) ?? false}
+                />
+                <span>{period}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <fieldset className="schedule-picker">
+          <legend>Regular timetable <span>{timetable.length} periods</span></legend>
+          <input type="hidden" name="timetable" value={JSON.stringify(timetable)} />
+          {timetable.length === 0 && <p className="empty-schedule">No regular busy periods added.</p>}
+          {timetable.map((slot, index) => (
+            <div className="schedule-period" key={`${index}-${slot.day}`}>
+              <label className="field-label">
+                Weekday
+                <select
+                  aria-label={`Timetable period ${index + 1} weekday`}
+                  value={slot.day}
+                  onChange={(event) => updateSlot(index, "day", event.target.value)}
+                >
+                  {weekDays.map((day) => <option key={day}>{day}</option>)}
+                </select>
+              </label>
+              <label className="field-label">
+                Busy from
+                <input
+                  aria-label={`Timetable period ${index + 1} start time`}
+                  type="time"
+                  value={minutesToTime(slot.start)}
+                  onChange={(event) => updateSlot(index, "start", event.target.value)}
+                />
+              </label>
+              <label className="field-label">
+                Busy until
+                <input
+                  aria-label={`Timetable period ${index + 1} end time`}
+                  type="time"
+                  value={minutesToTime(slot.end)}
+                  onChange={(event) => updateSlot(index, "end", event.target.value)}
+                />
+              </label>
+              <button
+                type="button"
+                className="remove-period"
+                aria-label={`Remove timetable period ${index + 1}`}
+                onClick={() => setTimetable((current) => current.filter((_, slotIndex) => slotIndex !== index))}
+              >
+                <Icon name="x" size={16} />
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            className="add-period-button"
+            onClick={() =>
+              setTimetable((current) => [
+                ...current,
+                { day: "Mon", start: 9 * 60, end: 10 * 60 },
+              ])
+            }
+          >
+            <Icon name="plus" size={15} /> Add timetable period
+          </button>
+        </fieldset>
+        <div className="modal-footer">
+          <button type="button" className="button button-quiet" onClick={onClose}>Cancel</button>
+          <button type="submit" className="button button-primary">
+            <Icon name={teacher ? "check" : "plus"} size={17} />
+            {teacher ? "Save changes" : "Add teacher"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function TeachersDirectory({
+  teachers: visibleTeachers,
+  search,
+  onAdd,
+  onEdit,
+}: {
+  teachers: typeof teachers;
+  search: string;
+  onAdd: () => void;
+  onEdit: (teacher: Teacher) => void;
+}) {
+  function exportTeachers() {
+    const header = ["Name", "Status", "Specializations", "Teaching load", "Substitute load"];
+    const rows = visibleTeachers.map((teacher) => [
+      teacher.name,
+      teacher.status,
+      teacher.specializations.join("; "),
+      String(teacher.teachingLoad),
+      String(teacher.currentSubLoad),
+    ]);
+    const csv = [header, ...rows]
+      .map((row) => row.map((field) => `"${field.replaceAll('"', '""')}"`).join(","))
+      .join("\r\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "subjtitute-teachers.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <>
+      <PageHeading eyebrow="PEOPLE & AVAILABILITY" title="Your teachers" description="A clear view of subject expertise and current substitute capacity." actions={<><Button variant="secondary" onClick={exportTeachers}><Icon name="arrow" size={17} /> Export list</Button><Button onClick={onAdd}><Icon name="plus" size={17} /> Add teacher</Button></>} />
+      <div className="subpage-stats"><StatCard label="Teachers shown" value={String(visibleTeachers.length).padStart(2, "0")} change={search ? "Matching your search" : "Across 4 departments"} icon="users" tone="blue" /><StatCard label="Available now" value={String(visibleTeachers.filter((teacher) => teacher.status === "available").length).padStart(2, "0")} change="Ready for matching" icon="check" tone="mint" /><StatCard label="Avg. teaching load" value={visibleTeachers.length ? (visibleTeachers.reduce((total, teacher) => total + teacher.teachingLoad, 0) / visibleTeachers.length).toFixed(1) : "—"} suffix={visibleTeachers.length ? " hrs" : ""} change="Weekly hours" icon="chart" tone="yellow" /></div>
+      <div className="panel directory-panel">
+        <div className="panel-heading"><div><div className="panel-title-row"><h2>Teacher directory</h2><span className="count-pill">{visibleTeachers.length}</span></div><p>Search by name or subject specialization from the top bar.</p></div><button className="filter-button"><Icon name="filter" size={17} /> All statuses <Icon name="chevron" size={14} /></button></div>
+        <div className="table-wrap">
+          <table className="request-table teacher-table">
+            <thead><tr><th>TEACHER</th><th>SUBJECT SPECIALIZATIONS</th><th>TEACHING LOAD</th><th>SUB LOAD</th><th>STATUS</th><th /></tr></thead>
+            <tbody>{visibleTeachers.map((teacher) => <tr key={teacher.id}>
+              <td><div className="table-teacher"><span className="teacher-avatar" style={{ backgroundColor: teacher.color }}>{teacher.initials}</span><div><strong>{teacher.name}</strong><small>{teacher.id}</small></div></div></td>
+              <td><div className="subject-tags">{teacher.specializations.map((subject) => <span key={subject}>{subject}</span>)}</div></td>
+              <td><span className="load-value">{teacher.teachingLoad}<small> / 30 hrs</small></span><div className="load-track"><span style={{ width: `${Math.min(100, teacher.teachingLoad / 30 * 100)}%` }} /></div></td>
+              <td><span className="sub-load">{teacher.currentSubLoad}<small> / 3</small></span></td>
+              <td><span className={`status-tag ${teacher.status === "available" ? "status-confirmed" : "status-unfilled"}`}><span className="status-dot" />{teacher.status === "available" ? "Available" : teacher.status === "on_leave" ? "On leave" : "Inactive"}</span></td>
+              <td><button className="edit-teacher-button" onClick={() => onEdit(teacher)} aria-label={`Edit ${teacher.name}`}><Icon name="settings" size={15} /> Edit</button></td>
+            </tr>)}
+            {visibleTeachers.length === 0 && <tr><td className="no-results" colSpan={6}>No teachers match “{search}”. Try another name or subject.</td></tr>}</tbody>
+          </table>
+        </div>
+        <div className="table-note"><Icon name="shield" size={16} /> Eligibility checks include availability, timetable conflicts, expertise, prep time, budget, and workload.</div>
+      </div>
+    </>
+  );
+}
+
+function MatchResults({
+  teachers: teacherRecords,
+  requests,
+  result,
+  confirmed,
+  onConfirm,
+  onSelectAlternative,
+  onRun,
+  computeMillis,
+  hasRun,
+}: {
+  teachers: typeof teachers;
+  requests: ClassRequest[];
+  result: MatchResult;
+  confirmed: string[];
+  onConfirm: (requestId: string) => void;
+  onSelectAlternative: (requestId: string, teacherId: string) => void;
+  onRun: () => void;
+  computeMillis: number;
+  hasRun: boolean;
+}) {
+  return (
+    <>
+      <PageHeading eyebrow="DECISION SUPPORT" title="Match results" description="Recommended coverage, ranked alternatives, and the factors behind every score." actions={<Button onClick={onRun}><Icon name="sparkles" size={17} /> Run matching</Button>} />
+      <div className="results-banner">
+        <div className="results-banner-icon"><Icon name="sparkles" size={20} /></div>
+        <div><strong>{hasRun ? "Matching run complete" : "Preview recommendations"}</strong><p>{hasRun ? `${Object.keys(result.assignments).length} of ${requests.length} classes matched in ${computeMillis} ms.` : "Add your school data to generate recommendations. Run matching again after each change."}</p></div>
+        <div className="banner-metric"><strong>{Object.keys(result.assignments).length}/{requests.length}</strong><span>classes covered</span></div>
+      </div>
+      <div className="results-list">
+        {requests.map((request) => {
+          const teacherId = result.assignments[request.id];
+          const teacher = teacherRecords.find((item) => item.id === teacherId);
+          const ranking = result.classRankings[request.id] ?? [];
+          const topScore = ranking.find(([id]) => id === teacherId)?.[1] ?? 0;
+          const explanation = result.explanations[request.id] ?? {};
+          return (
+            <article className="panel result-card" key={request.id}>
+              <div className="result-card-head">              <div className="result-class"><span className="subject-badge">{request.subject.slice(0, 2).toUpperCase()}</span><div><span className="eyebrow">{request.id} · GRADE {request.gradeLevel} · {request.section}</span><h2>{request.subject}</h2><span className="muted"><Icon name="clock" size={14} /> {formatPeriod(request)}{formatDateRange(request) ? ` · ${formatDateRange(request)}` : ""}</span></div></div><span className={confirmed.includes(request.id) ? "status-tag status-confirmed" : "status-tag status-pending"}>{confirmed.includes(request.id) ? "Confirmed" : "Recommended"}</span></div>
+              {teacher ? (
+                <>
+                  <div className="result-match">
+                    <div className="result-teacher"><span className="teacher-avatar large-avatar" style={{ backgroundColor: teacher.color }}>{teacher.initials}</span><div><span className="eyebrow">BEST-FIT SUBSTITUTE</span><strong>{teacher.name}</strong><span>{teacher.specializations.join(" · ")}</span></div></div>
+                    <div className="result-score"><strong>{Math.round(topScore * 100)}<small>%</small></strong><span>Class preference score</span></div>
+                    {!confirmed.includes(request.id) && <Button variant="secondary" onClick={() => onConfirm(request.id)}><Icon name="check" size={16} /> Confirm match</Button>}
+                  </div>
+                  <div className="explanation-grid">
+                    <div><span>Subject expertise</span><strong>{percent(explanation.subject_expertise)}</strong><small>Weight 35%</small></div>
+                    <div><span>Teacher preference</span><strong>{percent(explanation.preference_list)}</strong><small>Weight 20%</small></div>
+                    <div><span>Substitute workload</span><strong>{percent(explanation.current_sub_load)}</strong><small>Weight 15%</small></div>
+                    <div><span>Teaching load</span><strong>{percent(explanation.teaching_load)}</strong><small>Weight 10%</small></div>
+                    <div><span>Notice time</span><strong>{percent(explanation.notice_time)}</strong><small>Weight 10%</small></div>
+                    <div><span>Honorarium fit</span><strong>{percent(explanation.cost)}</strong><small>Weight 10%</small></div>
+                  </div>
+                  <div className="alternates">
+                    <span>TOP ALTERNATES</span>
+                    {ranking.filter(([id]) => id !== teacherId).slice(0, 3).map(([id, score], index) => {
+                      const alternate = teacherRecords.find((item) => item.id === id);
+                      return alternate ? (
+                        <button
+                          className="alternate-chip"
+                          key={id}
+                          disabled={confirmed.includes(request.id)}
+                          onClick={() => onSelectAlternative(request.id, id)}
+                          aria-label={`Use ${alternate.name} instead, match score ${Math.round(score * 100)} percent`}
+                        >
+                          <i>{index + 2}</i>
+                          {alternate.name}
+                          <strong>{Math.round(score * 100)}%</strong>
+                          {!confirmed.includes(request.id) && <span className="alternate-use">Use</span>}
+                        </button>
+                      ) : null;
+                    })}
+                    {ranking.length <= 1 && <span className="muted">No other eligible teachers for this class.</span>}
+                    {!confirmed.includes(request.id) && ranking.length > 1 && <span className="alternate-hint">Choose an alternative, then confirm the match.</span>}
+                  </div>
+                </>
+              ) : (
+                <div className="unfilled-box"><Icon name="clock" size={18} /><div><strong>No eligible teacher found</strong><span>Every teacher was filtered out by schedule, subject expertise, preparation time, budget, or workload.</span></div></div>
+              )}
+            </article>
+          );
+        })}
+      </div>
+      <div className="algorithm-footnote"><Icon name="shield" size={16} /><span>Modified Gale–Shapley deferred acceptance · Class-proposing · Teacher capacity and timetable conflicts respected.</span><button onClick={onRun}>Re-run matching <Icon name="arrow" size={14} /></button></div>
+    </>
+  );
+}
+
+function percent(value: number | undefined): string {
+  return `${Math.round((value ?? 0) * 100)}%`;
+}
+
+function Settings() {
+  const criteria = [
+    ["Subject expertise", 35, "#6BF178"],
+    ["Teacher preference", 20, "#35A7FF"],
+    ["Substitute workload", 15, "#FFE74C"],
+    ["Teaching load", 10, "#FF5964"],
+    ["Notice time", 10, "#bdb5ff"],
+    ["Honorarium fit", 10, "#ffc98f"],
+  ] as const;
+  return (
+    <>
+      <PageHeading eyebrow="SCHOOL CONFIGURATION" title="Matching settings" description="Tune the school’s eligibility rules and preference weights." />
+      <div className="settings-grid">
+        <section className="panel settings-card"><div className="panel-heading"><div><h2>Eligibility policy</h2><p>Hard requirements used to screen candidates.</p></div><span className="settings-icon"><Icon name="shield" /></span></div>
+          <div className="setting-row"><div><strong>Minimum subject expertise</strong><span>Exact specialization or same subject category</span></div><span className="setting-value">0.60 <small>/ 1.00</small></span></div>
+          <div className="setting-row"><div><strong>Maximum substitute classes</strong><span>Per teacher, including current assignments</span></div><span className="setting-value">3 <small>classes</small></span></div>
+          <div className="setting-row"><div><strong>Maximum teaching load</strong><span>Used to normalize workload preference</span></div><span className="setting-value">30 <small>hrs / week</small></span></div>
+        </section>
+        <section className="panel settings-card weights-card"><div className="panel-heading"><div><h2>Class preference weights</h2><p>How a class ranks eligible substitute teachers.</p></div><span className="weight-total">100%</span></div>
+          <div className="weight-list">{criteria.map(([label, weight, color]) => <div className="weight-row" key={label}><div><span className="weight-color" style={{ backgroundColor: color }} /><strong>{label}</strong><b>{weight}%</b></div><div className="weight-track"><span style={{ width: `${weight * 2.5}%`, backgroundColor: color }} /></div></div>)}</div>
+          <div className="settings-note"><Icon name="book" size={16} /> Weights should come from survey results. These are placeholder defaults for the prototype.</div>
+        </section>
+      </div>
+      <section className="panel settings-card teacher-weights"><div className="panel-heading"><div><h2>Teacher preference weights</h2><p>How each teacher ranks the classes requesting coverage.</p></div><span className="weight-total">100%</span></div><div className="teacher-weight-grid"><div><span>Subject preference</span><strong>40%</strong></div><div><span>Subject fit</span><strong>20%</strong></div><div><span>Grade level</span><strong>15%</strong></div><div><span>Time slot</span><strong>15%</strong></div><div><span>Honorarium</span><strong>10%</strong></div></div><div className="settings-note"><Icon name="shield" size={16} /> Scores are normalized and explainable. A single eligible candidate receives a normalized score of 1.0.</div></section>
+    </>
+  );
+}
