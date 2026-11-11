@@ -27,6 +27,9 @@ are also available there.
 The app opens with a demo administrator login (`admin` / `adminaccess`). This
 client-side login is only a UI gate for the prototype; it is not production
 authentication and does not protect data from access.
+The interface uses the supplied SubjTitute logo and color palette. Use the
+theme control on the sign-in screen or in Settings to switch between light and
+dark mode; the selection is saved in this browser.
 
 ## Validate
 

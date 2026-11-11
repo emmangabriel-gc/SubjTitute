@@ -1,7 +1,8 @@
 "use client";
 
 import type { FormEvent, ReactNode } from "react";
-import { useMemo, useState } from "react";
+import Image from "next/image";
+import { useEffect, useMemo, useState } from "react";
 import { classRequests, teachers } from "@/lib/demo-data";
 import { matchSubstitutes, overlaps } from "@/lib/matching";
 import type { ClassRequest, MatchResult, Teacher } from "@/lib/matching/types";
@@ -27,7 +28,9 @@ type IconName =
   | "coin"
   | "trend"
   | "shield"
-  | "menu";
+  | "menu"
+  | "moon"
+  | "sun";
 
 const subjectOptions = [
   "General Mathematics",
@@ -75,7 +78,32 @@ const iconArtwork: Record<IconName, ReactNode> = {
   trend: <><path d="m3 17 6-6 4 4 8-8" /><path d="M15 7h6v6" /></>,
   shield: <><path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11Z" /><path d="m9 12 2 2 4-4" /></>,
   menu: <><path d="M4 6h16M4 12h16M4 18h16" /></>,
+  moon: <path d="M20.9 13A9 9 0 0 1 11 3.1 9 9 0 1 0 20.9 13Z" />,
+  sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" /></>,
 };
+
+function ThemeToggle({
+  darkMode,
+  onToggle,
+  compact = false,
+}: {
+  darkMode: boolean;
+  onToggle: () => void;
+  compact?: boolean;
+}) {
+  return (
+    <button
+      className={`theme-toggle${compact ? " theme-toggle-compact" : ""}`}
+      type="button"
+      aria-label={`Switch to ${darkMode ? "light" : "dark"} mode`}
+      aria-pressed={darkMode}
+      onClick={onToggle}
+    >
+      <Icon name={darkMode ? "sun" : "moon"} size={16} />
+      <span>{darkMode ? "Light mode" : "Dark mode"}</span>
+    </button>
+  );
+}
 
 function Icon({
   name,
@@ -227,6 +255,23 @@ export default function Home() {
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [loginError, setLoginError] = useState("");
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
+
+  useEffect(() => {
+    const savedTheme = window.localStorage.getItem("subjtitute-theme");
+    const useDarkMode = savedTheme === "dark";
+    document.documentElement.dataset.theme = useDarkMode ? "dark" : "light";
+    if (useDarkMode) {
+      window.requestAnimationFrame(() => setDarkMode(true));
+    }
+  }, []);
+
+  function toggleTheme() {
+    const nextDarkMode = !darkMode;
+    setDarkMode(nextDarkMode);
+    document.documentElement.dataset.theme = nextDarkMode ? "dark" : "light";
+    window.localStorage.setItem("subjtitute-theme", nextDarkMode ? "dark" : "light");
+  }
 
   const openRequests = requests.filter((request) => request.status === "open");
   const filteredTeachers = useMemo(() => {
@@ -538,8 +583,11 @@ export default function Home() {
       <main className="login-shell">
         <section className="login-card" aria-labelledby="login-title">
           <div className="login-brand">
-            <span className="brand-mark">s.</span>
+            <span className="brand-mark">
+              <Image src="/subjtitute-logo.png" alt="" width={34} height={34} priority />
+            </span>
             <span className="brand-name">subjtitute<span>.</span></span>
+            <ThemeToggle darkMode={darkMode} onToggle={toggleTheme} compact />
           </div>
           <span className="eyebrow">ADMINISTRATOR ACCESS</span>
           <h1 id="login-title">Welcome back</h1>
@@ -586,7 +634,9 @@ export default function Home() {
             setActiveView("Overview");
           }}
         >
-          <span className="brand-mark">s.</span>
+          <span className="brand-mark">
+            <Image src="/subjtitute-logo.png" alt="" width={34} height={34} priority />
+          </span>
           <span className="brand-name">subjtitute<span>.</span></span>
         </a>
 
@@ -621,14 +671,6 @@ export default function Home() {
         </button>
 
         <div className="sidebar-bottom">
-          <div className="help-card">
-            <div className="help-icon"><Icon name="book" size={19} /></div>
-            <strong>Need a hand?</strong>
-            <p>Learn how matching works and what each score means.</p>
-            <button onClick={() => setActiveView("Settings")}>
-              Read the guide <Icon name="arrow" size={15} />
-            </button>
-          </div>
           <div className="profile">
             <div className="profile-avatar">AD</div>
             <div className="profile-copy">
@@ -677,7 +719,12 @@ export default function Home() {
 
       <main className="main-area">
         <header className="topbar">
-          <div className="mobile-brand"><span className="brand-mark">s.</span> subjtitute.</div>
+          <div className="mobile-brand">
+            <span className="brand-mark">
+              <Image src="/subjtitute-logo.png" alt="" width={27} height={27} priority />
+            </span>
+            subjtitute.
+          </div>
           <div
             className="profile-menu-wrapper mobile-profile-menu"
             onBlur={(event) => {
@@ -771,7 +818,9 @@ export default function Home() {
               hasRun={hasRun}
             />
           )}
-          {activeView === "Settings" && <Settings />}
+          {activeView === "Settings" && (
+            <Settings darkMode={darkMode} onToggleTheme={toggleTheme} />
+          )}
         </div>
       </main>
 
@@ -1462,7 +1511,13 @@ function percent(value: number | undefined): string {
   return `${Math.round((value ?? 0) * 100)}%`;
 }
 
-function Settings() {
+function Settings({
+  darkMode,
+  onToggleTheme,
+}: {
+  darkMode: boolean;
+  onToggleTheme: () => void;
+}) {
   const criteria = [
     ["Subject expertise", 35, "#6BF178"],
     ["Teacher preference", 20, "#35A7FF"],
@@ -1473,7 +1528,12 @@ function Settings() {
   ] as const;
   return (
     <>
-      <PageHeading eyebrow="SENIOR HIGH SCHOOL CONFIGURATION" title="Matching settings" description="Tune the senior high school’s eligibility rules and preference weights." />
+      <PageHeading
+        eyebrow="SENIOR HIGH SCHOOL CONFIGURATION"
+        title="Matching settings"
+        description="Tune the senior high school’s eligibility rules and preference weights."
+        actions={<ThemeToggle darkMode={darkMode} onToggle={onToggleTheme} />}
+      />
       <div className="settings-grid">
         <section className="panel settings-card"><div className="panel-heading"><div><h2>Eligibility policy</h2><p>Hard requirements used to screen candidates.</p></div><span className="settings-icon"><Icon name="shield" /></span></div>
           <div className="setting-row"><div><strong>Minimum subject expertise</strong><span>Exact specialization or same subject category</span></div><span className="setting-value">0.60 <small>/ 1.00</small></span></div>
