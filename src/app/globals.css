@@ -448,7 +448,10 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .login-card > .eyebrow { color: #9294a0; }
 .login-card h1 { margin: 10px 0 7px; font-size: 30px; letter-spacing: -1.2px; }
 .login-copy { margin: 0; color: #858692; font-size: 13px; line-height: 1.5; }
-.login-form { margin-top: 27px; }
+.login-role-picker { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 22px; padding: 4px; border-radius: 10px; background: #f4f5f8; }
+.login-role-picker button { min-height: 36px; border: 0; border-radius: 7px; background: transparent; color: #777987; font-size: 11px; font-weight: 650; cursor: pointer; }
+.login-role-picker button.active { background: #fff; color: #242630; box-shadow: 0 1px 4px #11121a12; }
+.login-form { margin-top: 19px; }
 .login-field { display: flex; flex-direction: column; gap: 8px; margin-bottom: 17px; color: #555763; font-size: 11px; font-weight: 700; }
 .login-field input { width: 100%; height: 44px; padding: 0 12px; border: 1px solid #e8e8ee; border-radius: 9px; background: #fff; color: var(--ink); font-size: 12px; font-weight: 500; }
 .login-field input::placeholder { color: #adaeb7; }
@@ -456,6 +459,76 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .login-submit { width: 100%; min-height: 44px; margin-top: 3px; font-size: 12px; }
 .login-submit svg { margin-left: auto; }
 .login-footnote { margin: 24px 0 0; padding-top: 17px; border-top: 1px solid #f0f0f4; color: #9697a2; font-size: 10px; text-align: center; }
+.login-loading-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: radial-gradient(ellipse at 18% 15%, #e8ffe9 0, transparent 34%), radial-gradient(ellipse at 85% 85%, #eeecff 0, transparent 35%), var(--background); }
+.login-loading-card { width: min(100%, 390px); padding: 40px 32px; border: 1px solid #ededf2; border-radius: 18px; background: #fff; box-shadow: 0 18px 55px #11121a0d; text-align: center; }
+.login-loading-brand { min-height: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 0; margin-bottom: 25px; }
+.login-loading-animation { display: block; width: 160px; height: 160px; object-fit: contain; }
+.login-loading-wordmark { clip-path: inset(0 100% 0 0); animation: wordmark-write .7s steps(11,end) .75s forwards; color: var(--ink); font-size: 25px; font-weight: 750; letter-spacing: -1.3px; white-space: nowrap; }
+.login-loading-wordmark span { color: var(--pink); }
+.login-loading-card > .eyebrow { color: #9294a0; }
+.login-loading-card h1 { margin: 9px 0 5px; font-size: 22px; letter-spacing: -.6px; }
+.login-loading-card p { margin: 0; color: #858692; font-size: 12px; }
+.login-loading-track { height: 4px; overflow: hidden; margin-top: 25px; border-radius: 99px; background: #eef0f3; }
+.login-loading-track span { display: block; width: 100%; height: 100%; border-radius: inherit; background: var(--blue); transform: scaleX(0); transform-origin: left; animation: load-workspace 2.2s ease-out forwards; }
+@keyframes wordmark-write { to { clip-path: inset(0 0 0 0); } }
+@keyframes load-workspace { to { transform: scaleX(1); } }
+.teacher-portal-shell { min-height: 100vh; background: var(--background); }
+.teacher-portal-topbar { min-height: 74px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 12px clamp(18px, 5vw, 64px); border-bottom: 1px solid #ececf1; background: #fff; }
+.teacher-portal-brand { display: inline-flex; align-items: center; gap: 9px; color: var(--ink); text-decoration: none; }
+.teacher-portal-brand img { width: 34px; height: 34px; object-fit: contain; }
+.teacher-portal-brand .brand-name { display: inline; }
+.teacher-portal-actions { display: flex; align-items: center; gap: 10px; }
+.teacher-portal-identity { display: flex; align-items: center; gap: 8px; margin-right: 7px; }
+.teacher-portal-identity > span:last-child { display: flex; flex-direction: column; gap: 3px; }
+.teacher-portal-identity strong { font-size: 11px; }
+.teacher-portal-identity small { color: #92939f; font-size: 9px; }
+.teacher-portal-content { max-width: 1050px; }
+.teacher-portal-stats { grid-template-columns: repeat(3,minmax(0,1fr)); }
+.leave-approvals-panel, .teacher-leave-panel { padding: 19px 0 0; margin-bottom: 16px; overflow: hidden; }
+.leave-approvals-panel > .panel-heading, .teacher-leave-panel > .panel-heading { margin-bottom: 14px; }
+.leave-approval-list, .teacher-leave-list { border-top: 1px solid #f0f0f4; }
+.leave-approval-card, .teacher-leave-application { padding: 15px 20px; border-bottom: 1px solid #f0f0f4; }
+.leave-approval-heading { display: flex; align-items: center; gap: 9px; }
+.leave-approval-heading > div { display: flex; flex-direction: column; gap: 4px; }
+.leave-approval-heading strong { font-size: 11px; }
+.leave-approval-heading > div > span { color: #92939f; font-size: 9px; }
+.leave-approval-sessions, .teacher-leave-sessions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; margin: 12px 0; }
+.leave-approval-session, .teacher-leave-session { min-width: 0; display: flex; flex-direction: column; gap: 4px; padding: 9px; border: 1px solid #eeeef2; border-radius: 8px; background: #fbfbfd; }
+.leave-approval-session strong, .teacher-leave-session strong { font-size: 10px; }
+.leave-approval-session span, .teacher-leave-session span { color: #858692; font-size: 9px; line-height: 1.4; }
+.leave-approval-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.teacher-leave-application-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.teacher-leave-application-heading h3 { margin: 4px 0 0; font-size: 12px; }
+.teacher-leave-application .teacher-leave-sessions { margin: 12px 0 8px; }
+.teacher-leave-status-copy { margin: 0; color: #777987; font-size: 10px; line-height: 1.5; }
+.teacher-coverage-panel { padding: 19px 0 0; overflow: hidden; }
+.teacher-coverage-panel > .panel-heading { margin-bottom: 14px; }
+.teacher-coverage-list { border-top: 1px solid #f0f0f4; }
+.teacher-coverage-item { display: grid; grid-template-columns: 36px minmax(0,1fr) auto; align-items: center; gap: 13px; padding: 15px 20px; border-bottom: 1px solid #f0f0f4; }
+.teacher-coverage-copy { min-width: 0; }
+.teacher-coverage-copy .eyebrow { font-size: 8px; }
+.teacher-coverage-copy h3 { margin: 4px 0 3px; font-size: 13px; }
+.teacher-coverage-copy p { margin: 0; color: #858692; font-size: 10px; }
+.teacher-coverage-detail { display: block; margin-top: 7px; color: #777987; font-size: 10px; line-height: 1.5; }
+.teacher-coverage-status { display: inline-flex; justify-content: center; padding: 6px 9px; border-radius: 7px; font-size: 9px; font-weight: 700; white-space: nowrap; }
+.teacher-coverage-status.is-assigned { background: #eaffed; color: #39884a; }
+.teacher-coverage-status.is-pending { background: #fff6d3; color: #92741c; }
+.teacher-coverage-status.is-waiting { background: #eef5fb; color: #58758b; }
+.teacher-coverage-status.is-unfilled { background: #fff0f1; color: #c84c57; }
+.teacher-coverage-empty { min-height: 190px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 24px; color: #8c8d99; text-align: center; }
+.teacher-coverage-empty strong { color: #363741; font-size: 12px; }
+.teacher-coverage-empty > span:last-child { font-size: 10px; }
+.teacher-coverage-panel > .table-note { margin-top: 0; }
+.teacher-leave-form { width: min(100%, 560px); }
+.teacher-leave-form-sessions { display: grid; gap: 9px; }
+.teacher-leave-form-session { min-width: 0; padding: 11px; border: 1px solid #eeeef2; border-radius: 9px; margin: 0; background: #fbfbfd; }
+.teacher-leave-form-session legend { width: 100%; display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; color: #5e606c; font-size: 10px; font-weight: 700; }
+.teacher-leave-form-session .field-label { gap: 5px; margin-bottom: 9px; font-size: 9px; }
+.teacher-leave-form-session .field-label input, .teacher-leave-form-session .field-label select { height: 36px; padding: 0 8px; font-size: 10px; }
+.teacher-leave-form-session .field-label:last-child { margin-bottom: 0; }
+.teacher-leave-remove { border: 0; background: transparent; color: #bd646b; font-size: 9px; font-weight: 650; cursor: pointer; }
+.teacher-leave-add-session { margin: 10px 0 12px; }
+.teacher-leave-form .login-error { margin: 0 0 12px; }
 .directory-search { width: min(230px, 100%); height: 35px; display: flex; align-items: center; gap: 8px; padding: 0 9px; border: 1px solid #eeeef2; border-radius: 8px; color: #a1a2ad; background: #fbfbfd; }
 .directory-search input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 10px; }
 .directory-search input::placeholder { color: #a0a1ad; }
@@ -514,11 +587,13 @@ html[data-theme="dark"] .explanation-grid > div { border-color: #33414d; }
 html[data-theme="dark"] .profile-menu,
 html[data-theme="dark"] .button-secondary,
 html[data-theme="dark"] .theme-toggle,
+html[data-theme="dark"] .login-loading-card,
 html[data-theme="dark"] .field-label > input,
 html[data-theme="dark"] .field-label > select,
 html[data-theme="dark"] .login-field input,
 html[data-theme="dark"] .round-arrow,
 html[data-theme="dark"] .panel-footer-link,
+html[data-theme="dark"] .teacher-portal-topbar,
 html[data-theme="dark"] .teacher-picker-trigger,
 html[data-theme="dark"] .teacher-picker-popover,
 html[data-theme="dark"] .teacher-picker-search { background: #222f3b; color: var(--foreground); border-color: #3a4a58; }
@@ -529,6 +604,40 @@ html[data-theme="dark"] .teacher-picker-options button[aria-selected="true"] { b
 html[data-theme="dark"] .teacher-picker-options button small,
 html[data-theme="dark"] .teacher-picker-empty { color: #aab8c3; }
 html[data-theme="dark"] .teacher-picker-empty { background: #222f3b; }
+html[data-theme="dark"] .login-role-picker { background: #141d25; }
+html[data-theme="dark"] .login-role-picker button.active { background: #2a3743; color: var(--foreground); }
+html[data-theme="dark"] .teacher-portal-brand,
+html[data-theme="dark"] .teacher-portal-identity strong,
+html[data-theme="dark"] .login-loading-card h1,
+html[data-theme="dark"] .login-loading-wordmark,
+html[data-theme="dark"] .teacher-coverage-copy h3,
+html[data-theme="dark"] .teacher-coverage-empty strong { color: var(--foreground); }
+html[data-theme="dark"] .teacher-portal-identity small,
+html[data-theme="dark"] .login-loading-card p,
+html[data-theme="dark"] .teacher-coverage-copy p,
+html[data-theme="dark"] .teacher-coverage-detail { color: #aab8c3; }
+html[data-theme="dark"] .login-role-picker button { color: #aab8c3; }
+html[data-theme="dark"] .teacher-portal-topbar,
+html[data-theme="dark"] .teacher-coverage-list,
+html[data-theme="dark"] .teacher-coverage-item,
+html[data-theme="dark"] .leave-approval-list,
+html[data-theme="dark"] .leave-approval-card,
+html[data-theme="dark"] .teacher-leave-list,
+html[data-theme="dark"] .teacher-leave-application,
+html[data-theme="dark"] .teacher-leave-form-session { border-color: #33414d; }
+html[data-theme="dark"] .leave-approval-session,
+html[data-theme="dark"] .teacher-leave-session,
+html[data-theme="dark"] .teacher-leave-form-session { background: #222f3b; }
+html[data-theme="dark"] .leave-approval-heading strong,
+html[data-theme="dark"] .teacher-leave-application-heading h3 { color: var(--foreground); }
+html[data-theme="dark"] .leave-approval-heading > div > span,
+html[data-theme="dark"] .leave-approval-session span,
+html[data-theme="dark"] .teacher-leave-session span,
+html[data-theme="dark"] .teacher-leave-status-copy { color: #aab8c3; }
+html[data-theme="dark"] .teacher-coverage-status.is-assigned { background: #203d2b; color: #8af394; }
+html[data-theme="dark"] .teacher-coverage-status.is-pending { background: #423a20; color: #ffe978; }
+html[data-theme="dark"] .teacher-coverage-status.is-waiting { background: #243746; color: #b6d7ef; }
+html[data-theme="dark"] .teacher-coverage-status.is-unfilled { background: #3c252b; color: #ff9aa1; }
 html[data-theme="dark"] .absence-period { background: #1b2530; border-color: #33414d; }
 html[data-theme="dark"] .absence-period-list legend { color: #e1e8ed; }
 html[data-theme="dark"] .absence-period-list legend span { color: #aab8c3; }
@@ -619,4 +728,23 @@ html[data-theme="dark"] .mobile-nav button.active svg { color: var(--mint); }
   .login-shell { padding: 16px; }
   .login-card { padding: 27px 22px; }
   .login-brand { margin-bottom: 30px; }
+}
+
+@media (max-width: 650px) {
+  .teacher-portal-topbar { flex-wrap: wrap; gap: 10px; padding: 11px 15px; }
+  .teacher-portal-actions { width: 100%; gap: 7px; }
+  .teacher-portal-identity { flex: 1; margin-right: auto; }
+  .teacher-portal-actions .theme-toggle { width: 36px; min-height: 36px; padding: 0; }
+  .teacher-portal-actions .theme-toggle span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+  .teacher-portal-actions > .button { min-height: 36px; padding: 0 10px; }
+  .teacher-coverage-panel > .panel-heading { align-items: flex-start; }
+  .teacher-coverage-item { grid-template-columns: 30px minmax(0,1fr); gap: 9px; padding: 13px 14px; }
+  .teacher-coverage-item > .subject-badge { width: 30px; height: 30px; }
+  .teacher-coverage-status { grid-column: 2; justify-self: start; }
+  .leave-approval-card, .teacher-leave-application { padding: 13px 14px; }
+  .leave-approval-sessions, .teacher-leave-sessions { grid-template-columns: 1fr; }
+  .leave-approval-actions { flex-direction: column-reverse; }
+  .leave-approval-actions .button { width: 100%; }
+  .teacher-leave-application-heading { align-items: flex-start; }
+  .teacher-leave-form-session { padding: 9px; }
 }

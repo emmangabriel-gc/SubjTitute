@@ -49,6 +49,16 @@ describe("eligibility", () => {
     expect(isEligible(teacher("T1"), request("C1"), DEFAULT_POLICY)).toBe(true);
   });
 
+  it("does not assign the absent teacher to cover their own class", () => {
+    expect(
+      isEligible(
+        teacher("T1"),
+        { ...request("C1"), absentTeacherId: "T1" },
+        DEFAULT_POLICY,
+      ),
+    ).toBe(false);
+  });
+
   it.each([
     ["unavailable", { status: "on_leave" as const }],
     ["schedule conflict", { timetable: [{ day: "Mon", start: 10 * 60, end: 12 * 60 }] }],

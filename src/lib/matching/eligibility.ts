@@ -54,6 +54,7 @@ export function isEligible(
 ): boolean {
   return (
     teacher.status === "available" &&
+    teacher.id !== request.absentTeacherId &&
     !teacher.timetable.some((slot) => overlaps(request.slot, slot)) &&
     subjectExpertise(teacher, request.subject) >= policy.minExpertise &&
     request.minutesUntilStart >= teacher.requiredPrepMinutes &&

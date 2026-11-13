@@ -8,6 +8,22 @@ import { matchSubstitutes, overlaps } from "@/lib/matching";
 import type { ClassRequest, MatchResult, Teacher } from "@/lib/matching/types";
 
 type View = "Overview" | "Absences" | "Teachers" | "Match results" | "Settings";
+type TeacherLeaveSession = {
+  id: number;
+  subject: string;
+  gradeLevel: number;
+  section: string;
+  date: string;
+  startHour: string;
+  endHour: string;
+};
+type TeacherLeaveApplication = {
+  id: string;
+  teacherId: string;
+  sessions: TeacherLeaveSession[];
+  status: "pending" | "approved" | "rejected";
+  classRequestIds: string[];
+};
 type IconName =
   | "grid"
   | "calendar"
@@ -62,6 +78,8 @@ const teacherColors = [
   "#e7e1ff",
   "#e4f9ec",
 ];
+const DEFAULT_BUDGET_CAP = 200;
+const DEFAULT_TEACHER_PASSWORD = "teacher";
 
 const iconArtwork: Record<IconName, ReactNode> = {
   grid: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>,
@@ -174,6 +192,13 @@ function weekdayForDate(date: string): string {
   return weekDays[(weekdayIndex + 6) % weekDays.length];
 }
 
+function nextClassRequestNumber(requests: ClassRequest[]): number {
+  return requests.reduce((max, request) => {
+    const number = Number(request.id.replace(/\D/g, ""));
+    return Number.isFinite(number) ? Math.max(max, number) : max;
+  }, 0) + 1;
+}
+
 function updateMatchResult(
   teachers: Teacher[],
   requests: ClassRequest[],
@@ -247,6 +272,7 @@ function isTeacherTimetable(value: unknown): value is Teacher["timetable"] {
 export default function Home() {
   const [activeView, setActiveView] = useState<View>("Overview");
   const [requests, setRequests] = useState<ClassRequest[]>(classRequests);
+  const [leaveApplications, setLeaveApplications] = useState<TeacherLeaveApplication[]>([]);
   const [teacherRecords, setTeacherRecords] = useState(teachers);
   const [search, setSearch] = useState("");
   const [hasRun, setHasRun] = useState(false);
@@ -260,6 +286,9 @@ export default function Home() {
   const [editingTeacher, setEditingTeacher] = useState<Teacher | null>(null);
   const [notice, setNotice] = useState("");
   const [isSignedIn, setIsSignedIn] = useState(false);
+  const [loginRole, setLoginRole] = useState<"admin" | "teacher">("admin");
+  const [currentTeacherId, setCurrentTeacherId] = useState<string | null>(null);
+  const [isLoginLoading, setIsLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState("");
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
@@ -281,6 +310,9 @@ export default function Home() {
   }
 
   const openRequests = requests.filter((request) => request.status === "open");
+  const pendingLeaveApplications = leaveApplications.filter(
+    (application) => application.status === "pending",
+  );
   const filteredTeachers = useMemo(() => {
     const query = search.trim().toLowerCase();
     return teacherRecords.filter(
@@ -296,16 +328,40 @@ export default function Home() {
   function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
-    const username = String(formData.get("username") ?? "");
+    const username = String(formData.get("username") ?? "").trim();
     const password = String(formData.get("password") ?? "");
+    const matchedTeacher = loginRole === "teacher"
+      ? teacherRecords.find((teacher) => teacher.id.toLowerCase() === username.toLowerCase())
+      : undefined;
+    const isValid = loginRole === "admin"
+      ? username === "admin" && password === "adminaccess"
+      : Boolean(matchedTeacher && password === DEFAULT_TEACHER_PASSWORD);
 
-    if (username !== "admin" || password !== "adminaccess") {
-      setLoginError("The username or password is incorrect.");
+    if (!isValid) {
+      setLoginError(
+        loginRole === "admin"
+          ? "The username or password is incorrect."
+          : "The teacher ID or password is incorrect.",
+      );
       return;
     }
 
     setLoginError("");
-    setIsSignedIn(true);
+    setIsLoginLoading(true);
+    const signedInTeacherId = matchedTeacher?.id ?? null;
+    window.setTimeout(() => {
+      setCurrentTeacherId(signedInTeacherId);
+      setIsSignedIn(true);
+      setIsLoginLoading(false);
+    }, 2200);
+  }
+
+  function signOut() {
+    setIsSignedIn(false);
+    setCurrentTeacherId(null);
+    setLoginRole("admin");
+    setActiveView("Overview");
+    setIsProfileMenuOpen(false);
   }
 
   function runMatching(nextTeachers = teacherRecords, navigateToResults = true) {
@@ -436,10 +492,7 @@ export default function Home() {
       return;
     }
 
-    const firstRequestNumber = requests.reduce((max, request) => {
-      const number = Number(request.id.replace(/\D/g, ""));
-      return Number.isFinite(number) ? Math.max(max, number) : max;
-    }, 0) + 1;
+    const firstRequestNumber = nextClassRequestNumber(requests);
     const nextRequests: ClassRequest[] = absenceDates.map((date, index) => {
       const weekday = weekdayForDate(date);
       return {
@@ -466,6 +519,90 @@ export default function Home() {
     setNotice(
       `${nextRequests.length} absence ${nextRequests.length === 1 ? "request" : "requests"} reported. Ready to be matched.`,
     );
+    window.setTimeout(() => setNotice(""), 3200);
+  }
+
+  function submitLeaveApplication(teacherId: string, sessions: TeacherLeaveSession[]) {
+    if (!teacherRecords.some((teacher) => teacher.id === teacherId)) return;
+    const nextNumber = leaveApplications.reduce((max, application) => {
+      const number = Number(application.id.replace(/\D/g, ""));
+      return Number.isFinite(number) ? Math.max(max, number) : max;
+    }, 0) + 1;
+    setLeaveApplications((current) => [
+      ...current,
+      {
+        id: `L${String(nextNumber).padStart(2, "0")}`,
+        teacherId,
+        sessions,
+        status: "pending",
+        classRequestIds: [],
+      },
+    ]);
+  }
+
+  function approveLeaveApplication(applicationId: string) {
+    const application = leaveApplications.find(
+      (item) => item.id === applicationId && item.status === "pending",
+    );
+    const absentTeacher = application
+      ? teacherRecords.find((teacher) => teacher.id === application.teacherId)
+      : undefined;
+    if (!application || !absentTeacher) return;
+
+    const firstRequestNumber = nextClassRequestNumber(requests);
+    const nextRequests: ClassRequest[] = application.sessions.map((session, index) => ({
+      id: `C${String(firstRequestNumber + index).padStart(2, "0")}`,
+      subject: session.subject,
+      slot: {
+        day: weekdayForDate(session.date),
+        start: Number(session.startHour) * 60,
+        end: Number(session.endHour) * 60,
+        dateFrom: session.date,
+        dateTo: session.date,
+      },
+      gradeLevel: session.gradeLevel,
+      section: session.section,
+      minutesUntilStart: 120,
+      budgetCap: DEFAULT_BUDGET_CAP,
+      absentTeacherId: absentTeacher.id,
+      status: "open",
+    }));
+    const updatedRequests = [...requests, ...nextRequests];
+    const start = performance.now();
+    const nextResult = updateMatchResult(teacherRecords, updatedRequests, result);
+    const duration = Math.max(1, Math.round(performance.now() - start));
+
+    setRequests(updatedRequests);
+    setLeaveApplications((current) =>
+      current.map((item) =>
+        item.id === applicationId
+          ? {
+              ...item,
+              status: "approved",
+              classRequestIds: nextRequests.map((request) => request.id),
+            }
+          : item,
+      ),
+    );
+    setResult(nextResult);
+    setComputeMillis(duration);
+    setHasRun(true);
+    setActiveView("Match results");
+    setNotice(
+      `${nextRequests.length} class ${nextRequests.length === 1 ? "session" : "sessions"} approved and added to matching.`,
+    );
+    window.setTimeout(() => setNotice(""), 3200);
+  }
+
+  function rejectLeaveApplication(applicationId: string) {
+    setLeaveApplications((current) =>
+      current.map((application) =>
+        application.id === applicationId && application.status === "pending"
+          ? { ...application, status: "rejected" }
+          : application,
+      ),
+    );
+    setNotice("Leave application declined.");
     window.setTimeout(() => setNotice(""), 3200);
   }
 
@@ -587,17 +724,23 @@ export default function Home() {
     setNotice(
       editingTeacher
         ? `${name}’s details updated and open requests rematched.`
-        : `${name} added and open requests rematched.`,
+        : `${name} added with teacher ID ${savedTeacher.id}. Sign-in password: ${DEFAULT_TEACHER_PASSWORD}.`,
     );
     window.setTimeout(() => setNotice(""), 3200);
   }
 
   const navigation: Array<{ label: View; icon: IconName; badge?: number }> = [
     { label: "Overview", icon: "grid" },
-    { label: "Absences", icon: "calendar", badge: openRequests.length },
+    {
+      label: "Absences",
+      icon: "calendar",
+      badge: openRequests.length + pendingLeaveApplications.length,
+    },
     { label: "Teachers", icon: "users" },
     { label: "Match results", icon: "sparkles" },
   ];
+
+  if (isLoginLoading) return <LoginLoading />;
 
   if (!isSignedIn) {
     return (
@@ -610,16 +753,44 @@ export default function Home() {
             <span className="brand-name">subjtitute<span>.</span></span>
             <ThemeToggle darkMode={darkMode} onToggle={toggleTheme} compact />
           </div>
-          <span className="eyebrow">ADMINISTRATOR ACCESS</span>
-          <h1 id="login-title">Welcome back, Admin</h1>
-          <p className="login-copy">Sign in to manage substitute teacher matching.</p>
+          <span className="eyebrow">{loginRole === "admin" ? "ADMINISTRATOR ACCESS" : "TEACHER ACCESS"}</span>
+          <h1 id="login-title">{loginRole === "admin" ? "Welcome back, Admin" : "Teacher sign in"}</h1>
+          <p className="login-copy">
+            {loginRole === "admin"
+              ? "Sign in to manage substitute teacher matching."
+              : `Use your teacher ID and the shared password "${DEFAULT_TEACHER_PASSWORD}".`}
+          </p>
+          <div className="login-role-picker" role="group" aria-label="Account type">
+            <button
+              aria-pressed={loginRole === "admin"}
+              className={loginRole === "admin" ? "active" : ""}
+              onClick={() => {
+                setLoginRole("admin");
+                setLoginError("");
+              }}
+              type="button"
+            >
+              Administrator
+            </button>
+            <button
+              aria-pressed={loginRole === "teacher"}
+              className={loginRole === "teacher" ? "active" : ""}
+              onClick={() => {
+                setLoginRole("teacher");
+                setLoginError("");
+              }}
+              type="button"
+            >
+              Teacher
+            </button>
+          </div>
           <form className="login-form" onSubmit={signIn}>
             <label className="login-field">
-              Username
+              {loginRole === "admin" ? "Username" : "Teacher ID"}
               <input
                 autoComplete="username"
                 name="username"
-                placeholder="Enter your username"
+                placeholder={loginRole === "admin" ? "Enter your username" : "e.g. T01"}
                 required
               />
             </label>
@@ -638,9 +809,32 @@ export default function Home() {
               Sign in <Icon name="arrow" size={17} />
             </button>
           </form>
-          <p className="login-footnote">Administrator sign-in for Senior High School</p>
+          <p className="login-footnote">
+            {loginRole === "admin"
+              ? "Administrator sign-in for Senior High School"
+              : "Teacher sign-in is available after the admin creates your account."}
+          </p>
         </section>
       </main>
+    );
+  }
+
+  const signedInTeacher = teacherRecords.find((teacher) => teacher.id === currentTeacherId);
+  if (signedInTeacher) {
+    return (
+      <TeacherPortal
+        teacher={signedInTeacher}
+        teachers={teacherRecords}
+        requests={requests}
+        leaveApplications={leaveApplications}
+        result={result}
+        confirmed={confirmed}
+        hasRun={hasRun}
+        darkMode={darkMode}
+        onToggleTheme={toggleTheme}
+        onSignOut={signOut}
+        onSubmitLeave={submitLeaveApplication}
+      />
     );
   }
 
@@ -722,10 +916,7 @@ export default function Home() {
               {isProfileMenuOpen && (
                 <div className="profile-menu" role="menu">
                   <button
-                    onClick={() => {
-                      setIsProfileMenuOpen(false);
-                      setIsSignedIn(false);
-                    }}
+                    onClick={signOut}
                     role="menuitem"
                     type="button"
                   >
@@ -770,10 +961,7 @@ export default function Home() {
             {isProfileMenuOpen && (
               <div className="profile-menu" role="menu">
                 <button
-                  onClick={() => {
-                    setIsProfileMenuOpen(false);
-                    setIsSignedIn(false);
-                  }}
+                  onClick={signOut}
                   role="menuitem"
                   type="button"
                 >
@@ -783,6 +971,9 @@ export default function Home() {
             )}
           </div>
           <div className="breadcrumb"><span>Workspace</span><Icon name="chevron" size={14} /><strong>{activeView}</strong></div>
+          <button className="button button-secondary" onClick={signOut} type="button">
+            Sign out
+          </button>
         </header>
 
         <div className="page-content">
@@ -793,7 +984,7 @@ export default function Home() {
               result={result}
               confirmed={confirmed}
               onReport={() => setShowAbsenceForm(true)}
-              onRun={runMatching}
+              onRun={() => runMatching()}
               onConfirm={confirmMatch}
               onNavigate={setActiveView}
               hasRun={hasRun}
@@ -806,9 +997,12 @@ export default function Home() {
               requests={requests}
               result={result}
               confirmed={confirmed}
+              pendingLeaveApplications={pendingLeaveApplications}
               onReport={() => setShowAbsenceForm(true)}
-              onRun={runMatching}
+              onRun={() => runMatching()}
               onConfirm={confirmMatch}
+              onApproveLeave={approveLeaveApplication}
+              onRejectLeave={rejectLeaveApplication}
             />
           )}
           {activeView === "Teachers" && (
@@ -834,7 +1028,7 @@ export default function Home() {
               confirmed={confirmed}
               onConfirm={confirmMatch}
               onSelectAlternative={selectAlternative}
-              onRun={runMatching}
+              onRun={() => runMatching()}
               computeMillis={computeMillis}
               hasRun={hasRun}
             />
@@ -878,6 +1072,488 @@ export default function Home() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+function LoginLoading() {
+  return (
+    <main className="login-loading-shell" aria-live="polite">
+      <section className="login-loading-card">
+        <div className="login-loading-brand">
+          <Image
+            className="login-loading-animation"
+            src="/loading-animation.gif"
+            alt=""
+            width={160}
+            height={160}
+            unoptimized
+            priority
+          />
+          <span className="login-loading-wordmark">subjtitute<span>.</span></span>
+        </div>
+        <span className="eyebrow">SENIOR HIGH SCHOOL</span>
+        <h1>Getting things ready</h1>
+        <p>Your workspace is loading. This will only take a moment.</p>
+        <div className="login-loading-track" role="progressbar" aria-label="Loading workspace">
+          <span />
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function TeacherPortal({
+  teacher,
+  teachers: teacherRecords,
+  requests,
+  leaveApplications,
+  result,
+  confirmed,
+  hasRun,
+  darkMode,
+  onToggleTheme,
+  onSignOut,
+  onSubmitLeave,
+}: {
+  teacher: Teacher;
+  teachers: Teacher[];
+  requests: ClassRequest[];
+  leaveApplications: TeacherLeaveApplication[];
+  result: MatchResult;
+  confirmed: string[];
+  hasRun: boolean;
+  darkMode: boolean;
+  onToggleTheme: () => void;
+  onSignOut: () => void;
+  onSubmitLeave: (teacherId: string, sessions: TeacherLeaveSession[]) => void;
+}) {
+  const [showLeaveForm, setShowLeaveForm] = useState(false);
+  const leaveRequests = requests.filter((request) => request.absentTeacherId === teacher.id);
+  const teacherApplications = leaveApplications.filter(
+    (application) => application.teacherId === teacher.id,
+  );
+  const assignedCount = leaveRequests.filter(
+    (request) => request.status === "confirmed" || confirmed.includes(request.id),
+  ).length;
+  const recommendedCount = leaveRequests.filter(
+    (request) =>
+      request.status !== "confirmed" &&
+      !confirmed.includes(request.id) &&
+      Boolean(result.assignments[request.id]),
+  ).length;
+  const waitingCount = leaveRequests.length - assignedCount - recommendedCount;
+
+  return (
+    <div className="teacher-portal-shell">
+      <header className="teacher-portal-topbar">
+        <a className="teacher-portal-brand" href="#teacher-coverage">
+          <Image src="/subjtitute-logo.png" alt="" width={34} height={34} priority />
+          <span className="brand-name">subjtitute<span>.</span></span>
+        </a>
+        <div className="teacher-portal-actions">
+          <span className="teacher-portal-identity">
+            <span className="teacher-avatar" style={{ backgroundColor: teacher.color }}>
+              {teacher.initials}
+            </span>
+            <span><strong>{teacher.name}</strong><small>{teacher.id}</small></span>
+          </span>
+          <ThemeToggle darkMode={darkMode} onToggle={onToggleTheme} />
+          <button className="button button-secondary" onClick={onSignOut} type="button">
+            Sign out
+          </button>
+        </div>
+      </header>
+      <main className="page-content teacher-portal-content" id="teacher-coverage">
+        <PageHeading
+          eyebrow="TEACHER PORTAL"
+          title="Your leave coverage"
+          description="Check the coverage status of classes reported during your leave."
+          actions={
+            <Button onClick={() => setShowLeaveForm(true)}>
+              <Icon name="plus" size={17} /> File for leave
+            </Button>
+          }
+        />
+        <div className="subpage-stats teacher-portal-stats">
+          <StatCard
+            label="Classes reported"
+            value={String(leaveRequests.length).padStart(2, "0")}
+            change="Linked to your teacher ID"
+            icon="calendar"
+            tone="blue"
+          />
+          <StatCard
+            label="Substitute assigned"
+            value={String(assignedCount).padStart(2, "0")}
+            change="Confirmed by admin"
+            icon="check"
+            tone="mint"
+          />
+          <StatCard
+            label="Being arranged"
+            value={String(recommendedCount + waitingCount).padStart(2, "0")}
+            change="Awaiting confirmation or matching"
+            icon="clock"
+            tone="yellow"
+          />
+        </div>
+        <section className="panel teacher-leave-panel">
+          <div className="panel-heading">
+            <div>
+              <h2>Leave applications</h2>
+              <p>Track admin approval and see which class sessions were sent to matching.</p>
+            </div>
+          </div>
+          {teacherApplications.length ? (
+            <div className="teacher-leave-list">
+              {teacherApplications.map((application) => {
+                const status = application.status === "pending"
+                  ? "Pending review"
+                  : application.status === "approved"
+                    ? "Approved"
+                    : "Not approved";
+                const statusClass = application.status === "pending"
+                  ? "is-pending"
+                  : application.status === "approved"
+                    ? "is-assigned"
+                    : "is-unfilled";
+                return (
+                  <article className="teacher-leave-application" key={application.id}>
+                    <div className="teacher-leave-application-heading">
+                      <div>
+                        <span className="eyebrow">{application.id}</span>
+                        <h3>{application.sessions.length} class {application.sessions.length === 1 ? "session" : "sessions"}</h3>
+                      </div>
+                      <span className={`teacher-coverage-status ${statusClass}`}>{status}</span>
+                    </div>
+                    <div className="teacher-leave-sessions">
+                      {application.sessions.map((session) => (
+                        <div className="teacher-leave-session" key={session.id}>
+                          <strong>{session.subject}</strong>
+                          <span>Grade {session.gradeLevel} · {session.section}</span>
+                          <span>
+                            {weekdayForDate(session.date)} · {formatDate(session.date)} ·{" "}
+                            {formatTime(Number(session.startHour) * 60)}–{formatTime(Number(session.endHour) * 60)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="teacher-leave-status-copy">
+                      {application.status === "pending"
+                        ? "Waiting for an administrator to review this leave application."
+                        : application.status === "approved"
+                          ? `${application.classRequestIds.length} class ${application.classRequestIds.length === 1 ? "session was" : "sessions were"} added to matching.`
+                          : "This leave application was declined by the administrator."}
+                    </p>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="teacher-coverage-empty">
+              <span className="empty-icon"><Icon name="calendar" size={18} /></span>
+              <strong>No leave applications yet</strong>
+              <span>File a leave request to send your affected class sessions for admin review.</span>
+            </div>
+          )}
+        </section>
+        <section className="panel teacher-coverage-panel">
+          <div className="panel-heading">
+            <div>
+              <h2>Class coverage</h2>
+              <p>Substitute details appear after the administrator confirms the assignment.</p>
+            </div>
+          </div>
+          {leaveRequests.length ? (
+            <div className="teacher-coverage-list">
+              {leaveRequests.map((request) => {
+                const isAssigned =
+                  request.status === "confirmed" || confirmed.includes(request.id);
+                const hasRecommendation = Boolean(result.assignments[request.id]);
+                const isUnfilled = hasRun && result.unfilled.includes(request.id);
+                const assignedTeacher = isAssigned
+                  ? teacherRecords.find((item) => item.id === result.assignments[request.id])
+                  : undefined;
+                const status = isAssigned
+                  ? "Assigned"
+                  : hasRecommendation
+                    ? "Awaiting confirmation"
+                    : isUnfilled
+                      ? "No substitute found yet"
+                      : "Waiting for matching";
+                const statusClass = isAssigned
+                  ? "is-assigned"
+                  : hasRecommendation
+                    ? "is-pending"
+                    : isUnfilled
+                      ? "is-unfilled"
+                      : "is-waiting";
+                const detail = isAssigned
+                  ? assignedTeacher
+                    ? `Substitute: ${assignedTeacher.name}`
+                    : "The administrator confirmed class coverage."
+                  : hasRecommendation
+                    ? "A substitute is being considered. The administrator will confirm the assignment."
+                    : isUnfilled
+                      ? "No eligible substitute has been found yet. The administrator can review and rerun matching."
+                      : "Waiting for the administrator to run matching.";
+
+                return (
+                  <article className="teacher-coverage-item" key={request.id}>
+                    <span className="subject-badge">{request.subject.slice(0, 2).toUpperCase()}</span>
+                    <div className="teacher-coverage-copy">
+                      <span className="eyebrow">
+                        {request.id} · GRADE {request.gradeLevel} · {request.section}
+                      </span>
+                      <h3>{request.subject}</h3>
+                      <p>
+                        {formatDateRange(request) ?? request.slot.day} · {formatPeriod(request)}
+                      </p>
+                      <span className="teacher-coverage-detail">{detail}</span>
+                    </div>
+                    <span className={`teacher-coverage-status ${statusClass}`}>{status}</span>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="teacher-coverage-empty">
+              <span className="empty-icon"><Icon name="calendar" size={18} /></span>
+              <strong>No absence requests yet</strong>
+              <span>Requests reported under your teacher ID will appear here.</span>
+            </div>
+          )}
+          <div className="table-note">
+            <Icon name="shield" size={16} />
+            Substitute names are only shown after the administrator confirms a match.
+          </div>
+        </section>
+      </main>
+      {showLeaveForm && (
+        <TeacherLeaveForm
+          teacher={teacher}
+          onClose={() => setShowLeaveForm(false)}
+          onSubmit={(sessions) => {
+            onSubmitLeave(teacher.id, sessions);
+            setShowLeaveForm(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function TeacherLeaveForm({
+  teacher,
+  onSubmit,
+  onClose,
+}: {
+  teacher: Teacher;
+  onSubmit: (sessions: TeacherLeaveSession[]) => void;
+  onClose: () => void;
+}) {
+  const [sessions, setSessions] = useState<TeacherLeaveSession[]>([
+    {
+      id: 0,
+      subject: subjectOptions[0],
+      gradeLevel: 11,
+      section: "",
+      date: "",
+      startHour: "9",
+      endHour: "10",
+    },
+  ]);
+  const [nextSessionId, setNextSessionId] = useState(1);
+  const [formError, setFormError] = useState("");
+  const startHours = Array.from({ length: 10 }, (_, index) => index + 7);
+  const endHours = Array.from({ length: 10 }, (_, index) => index + 8);
+
+  function updateSession(
+    id: number,
+    property: keyof Omit<TeacherLeaveSession, "id">,
+    value: string,
+  ) {
+    setSessions((current) =>
+      current.map((session) =>
+        session.id === id
+          ? {
+              ...session,
+              [property]: property === "gradeLevel" ? Number(value) : value,
+            }
+          : session,
+      ),
+    );
+    setFormError("");
+  }
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const normalized = sessions.map((session) => ({
+      ...session,
+      section: session.section.trim(),
+    }));
+    const sessionKeys = normalized.map((session) =>
+      [
+        session.subject,
+        session.gradeLevel,
+        session.section.toLowerCase(),
+        session.date,
+        session.startHour,
+        session.endHour,
+      ].join("|"),
+    );
+    const isInvalid = normalized.some(
+      (session) =>
+        !subjectOptions.includes(session.subject) ||
+        (session.gradeLevel !== 11 && session.gradeLevel !== 12) ||
+        !session.section ||
+        !session.date ||
+        Number.isNaN(Date.parse(`${session.date}T00:00:00Z`)) ||
+        !Number.isFinite(Number(session.startHour)) ||
+        !Number.isFinite(Number(session.endHour)) ||
+        Number(session.startHour) < 0 ||
+        Number(session.endHour) > 24 ||
+        Number(session.endHour) <= Number(session.startHour),
+    );
+    if (isInvalid || new Set(sessionKeys).size !== sessionKeys.length) {
+      setFormError("Enter valid class details, dates, and times without duplicate sessions.");
+      return;
+    }
+    onSubmit(normalized);
+  }
+
+  return (
+    <div
+      className="modal-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <form className="absence-modal teacher-leave-form" onSubmit={submit}>
+        <div className="modal-heading">
+          <div>
+            <span className="eyebrow">LEAVE APPLICATION · {teacher.id}</span>
+            <h2>File for leave</h2>
+          </div>
+          <button type="button" className="icon-button" aria-label="Close dialog" onClick={onClose}>
+            <Icon name="x" />
+          </button>
+        </div>
+        <p className="modal-copy">
+          Add each class session affected by your leave. An administrator must approve your application before sessions go to matching.
+        </p>
+        <div className="teacher-leave-form-sessions">
+          {sessions.map((session, index) => (
+            <fieldset className="teacher-leave-form-session" key={session.id}>
+              <legend>
+                <span>Class session {index + 1}</span>
+                {sessions.length > 1 && (
+                  <button
+                    className="teacher-leave-remove"
+                    onClick={() => setSessions((current) => current.filter((item) => item.id !== session.id))}
+                    type="button"
+                  >
+                    Remove
+                  </button>
+                )}
+              </legend>
+              <label className="field-label">
+                Subject
+                <select
+                  onChange={(event) => updateSession(session.id, "subject", event.target.value)}
+                  required
+                  value={session.subject}
+                >
+                  {subjectOptions.map((subject) => <option key={subject}>{subject}</option>)}
+                </select>
+              </label>
+              <div className="form-grid">
+                <label className="field-label">
+                  Grade
+                  <select
+                    onChange={(event) => updateSession(session.id, "gradeLevel", event.target.value)}
+                    value={session.gradeLevel}
+                  >
+                    <option value={11}>Grade 11</option>
+                    <option value={12}>Grade 12</option>
+                  </select>
+                </label>
+                <label className="field-label">
+                  Section
+                  <input
+                    onChange={(event) => updateSession(session.id, "section", event.target.value)}
+                    placeholder="STEM A"
+                    required
+                    value={session.section}
+                  />
+                </label>
+              </div>
+              <label className="field-label">
+                Date
+                <input
+                  onChange={(event) => updateSession(session.id, "date", event.target.value)}
+                  required
+                  type="date"
+                  value={session.date}
+                />
+              </label>
+              <div className="form-grid">
+                <label className="field-label">
+                  Starts
+                  <select
+                    onChange={(event) => updateSession(session.id, "startHour", event.target.value)}
+                    value={session.startHour}
+                  >
+                    {startHours.map((hour) => (
+                      <option key={hour} value={hour}>{formatTime(hour * 60)}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field-label">
+                  Ends
+                  <select
+                    onChange={(event) => updateSession(session.id, "endHour", event.target.value)}
+                    value={session.endHour}
+                  >
+                    {endHours.map((hour) => (
+                      <option key={hour} value={hour}>{formatTime(hour * 60)}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </fieldset>
+          ))}
+        </div>
+        <button
+          className="add-period-button teacher-leave-add-session"
+          onClick={() => {
+            setSessions((current) => [
+              ...current,
+              {
+                id: nextSessionId,
+                subject: subjectOptions[0],
+                gradeLevel: 11,
+                section: "",
+                date: "",
+                startHour: "9",
+                endHour: "10",
+              },
+            ]);
+            setNextSessionId((id) => id + 1);
+          }}
+          type="button"
+        >
+          <Icon name="plus" size={15} /> Add another class session
+        </button>
+        {formError && <p className="login-error" role="alert">{formError}</p>}
+        <div className="modal-footer">
+          <button type="button" className="button button-quiet" onClick={onClose}>Cancel</button>
+          <button type="submit" className="button button-primary">
+            <Icon name="check" size={16} /> Submit leave request
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
@@ -1094,7 +1770,7 @@ function AbsenceForm({
         </fieldset>
         <label className="field-label">
           Honorarium budget per class
-          <input required name="budgetCap" type="number" min="0" defaultValue="200" />
+          <input required name="budgetCap" type="number" min="0" defaultValue={DEFAULT_BUDGET_CAP} />
         </label>
         <div className="modal-footer">
           <button type="button" className="button button-quiet" onClick={onClose}>Cancel</button>
@@ -1337,23 +2013,35 @@ function RequestTable({
 function Absences({
   teachers: teacherRecords,
   requests,
+  pendingLeaveApplications,
   result,
   confirmed,
   onReport,
   onRun,
   onConfirm,
+  onApproveLeave,
+  onRejectLeave,
 }: {
   teachers: typeof teachers;
   requests: ClassRequest[];
+  pendingLeaveApplications: TeacherLeaveApplication[];
   result: MatchResult;
   confirmed: string[];
   onReport: () => void;
   onRun: () => void;
   onConfirm: (requestId: string) => void;
+  onApproveLeave: (applicationId: string) => void;
+  onRejectLeave: (applicationId: string) => void;
 }) {
   return (
     <>
       <PageHeading eyebrow="COVERAGE PLANNING" title="Absence requests" description="Keep every classroom covered with a qualified substitute." actions={<><Button variant="secondary" onClick={onReport}><Icon name="plus" size={17} /> Report absence</Button><Button onClick={onRun}><Icon name="sparkles" size={17} /> Run matching</Button></>} />
+      <PendingLeaveApplications
+        applications={pendingLeaveApplications}
+        teachers={teacherRecords}
+        onApprove={onApproveLeave}
+        onReject={onRejectLeave}
+      />
       <div className="subpage-stats"><StatCard label="All requests" value={String(requests.length).padStart(2, "0")} change="For Monday" icon="calendar" tone="yellow" /><StatCard label="Waiting for approval" value={String(requests.filter((request) => !confirmed.includes(request.id)).length).padStart(2, "0")} change="Recommendations ready" icon="clock" tone="pink" /><StatCard label="Confirmed" value={String(confirmed.length).padStart(2, "0")} change="Substitutes assigned" icon="check" tone="mint" /></div>
       <div className="panel directory-panel">
         <div className="panel-heading"><div><h2>All class requests</h2><p>Review the recommended teacher and match confidence.</p></div><button className="filter-button"><Icon name="filter" size={17} /> All requests <Icon name="chevron" size={14} /></button></div>
@@ -1361,6 +2049,72 @@ function Absences({
         <div className="table-note"><Icon name="shield" size={16} /> Match scores reflect subject fit, workload, schedule, notice time, cost, and preferences.</div>
       </div>
     </>
+  );
+}
+
+function PendingLeaveApplications({
+  applications,
+  teachers: teacherRecords,
+  onApprove,
+  onReject,
+}: {
+  applications: TeacherLeaveApplication[];
+  teachers: Teacher[];
+  onApprove: (applicationId: string) => void;
+  onReject: (applicationId: string) => void;
+}) {
+  if (applications.length === 0) return null;
+
+  return (
+    <section className="panel leave-approvals-panel">
+      <div className="panel-heading">
+        <div>
+          <div className="panel-title-row">
+            <h2>Teacher leave applications</h2>
+            <span className="count-pill count-pill-coral">{applications.length}</span>
+          </div>
+          <p>Review class sessions before they are added to matching.</p>
+        </div>
+      </div>
+      <div className="leave-approval-list">
+        {applications.map((application) => {
+          const teacher = teacherRecords.find((item) => item.id === application.teacherId);
+          return (
+            <article className="leave-approval-card" key={application.id}>
+              <div className="leave-approval-heading">
+                <span className="teacher-avatar" style={{ backgroundColor: teacher?.color ?? "#e6f4ff" }}>
+                  {teacher?.initials ?? "T"}
+                </span>
+                <div>
+                  <strong>{teacher?.name ?? application.teacherId}</strong>
+                  <span>{application.id} · {application.sessions.length} class {application.sessions.length === 1 ? "session" : "sessions"}</span>
+                </div>
+              </div>
+              <div className="leave-approval-sessions">
+                {application.sessions.map((session) => (
+                  <div className="leave-approval-session" key={session.id}>
+                    <strong>{session.subject}</strong>
+                    <span>Grade {session.gradeLevel} · {session.section}</span>
+                    <span>
+                      {weekdayForDate(session.date)} · {formatDate(session.date)} ·{" "}
+                      {formatTime(Number(session.startHour) * 60)}–{formatTime(Number(session.endHour) * 60)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="leave-approval-actions">
+                <Button variant="quiet" onClick={() => onReject(application.id)}>
+                  Decline
+                </Button>
+                <Button onClick={() => onApprove(application.id)}>
+                  <Icon name="check" size={15} /> Approve and add to matching
+                </Button>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -1433,6 +2187,10 @@ function TeacherForm({
           Teacher name
           <input required name="name" defaultValue={teacher?.name ?? ""} placeholder="e.g. Alex Rivera" />
         </label>
+        <p className="field-hint">
+          All teacher accounts use the shared login password <strong>{DEFAULT_TEACHER_PASSWORD}</strong>.
+          {teacher ? ` Teacher ID: ${teacher.id}.` : " A teacher ID will be generated after saving."}
+        </p>
         <fieldset className="subject-picker">
           <legend>Subject specializations <span>Choose at least one</span></legend>
           <div className="subject-check-grid">
