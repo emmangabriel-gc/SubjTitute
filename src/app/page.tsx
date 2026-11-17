@@ -15,6 +15,7 @@ import {
 import type { TeacherLeaveApplication, TeacherLeaveSession } from "@/lib/teacher-leave";
 import { parseTimetableCsv } from "@/lib/timetable-csv";
 import { parseTimetableWorkbook } from "@/lib/timetable-workbook";
+import { parseTeachersCsv } from "@/lib/teacher-csv";
 
 type View = "Overview" | "Absences" | "Teachers" | "Match results" | "Settings";
 type IconName =
@@ -41,7 +42,8 @@ type IconName =
   | "moon"
   | "sun"
   | "eye"
-  | "eyeOff";
+  | "eyeOff"
+  | "upload";
 
 const subjectOptions = [
   "General Mathematics",
@@ -93,6 +95,7 @@ const iconArtwork: Record<IconName, ReactNode> = {
   bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M10 21h4" /></>,
   arrow: <><path d="M5 12h14M13 6l6 6-6 6" /></>,
   plus: <><path d="M12 5v14M5 12h14" /></>,
+  upload: <><path d="M12 16V4M7 9l5-5 5 5" /><path d="M5 20h14" /></>,
   check: <path d="m5 12 4 4L19 6" />,
   clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
   chart: <><path d="M3 3v18h18M8 15l4-4 3 3 6-7" /></>,
@@ -817,6 +820,76 @@ export default function Home() {
     window.setTimeout(() => setNotice(""), 3200);
   }
 
+  async function importTeachers(file: File) {
+    if (file.size > 1024 * 1024) {
+      setNotice("The teacher CSV must be smaller than 1 MB.");
+      window.setTimeout(() => setNotice(""), 3200);
+      return;
+    }
+
+    try {
+      const importedTeachers = parseTeachersCsv(await file.text());
+      const invalidSubjectRow = importedTeachers.find((teacher) =>
+        teacher.specializations.some((subject) => !subjectOptions.includes(subject)),
+      );
+      if (invalidSubjectRow) {
+        const invalidSubject = invalidSubjectRow.specializations.find(
+          (subject) => !subjectOptions.includes(subject),
+        );
+        throw new Error(
+          `Unknown subject "${invalidSubject}" on CSV row ${invalidSubjectRow.line}. Use listed subject names.`,
+        );
+      }
+
+      const invalidQualification = importedTeachers.find(
+        (teacher) => !qualificationOptions.includes(teacher.qualification),
+      );
+      if (invalidQualification) {
+        throw new Error(
+          `Unknown qualification on CSV row ${invalidQualification.line}. Use a listed qualification.`,
+        );
+      }
+
+      const nextNumber = teacherRecords.reduce((max, teacher) => {
+        const number = Number(teacher.id.replace(/\D/g, ""));
+        return Number.isFinite(number) ? Math.max(number, max) : max;
+      }, 0) + 1;
+      const addedTeachers: Teacher[] = importedTeachers.map((teacher, index) => {
+        const number = nextNumber + index;
+        return {
+          id: `T${String(number).padStart(2, "0")}`,
+          name: teacher.name,
+          initials: teacher.name
+            .split(/\s+/)
+            .slice(0, 2)
+            .map((part) => part[0]?.toUpperCase() ?? "")
+            .join(""),
+          color: teacherColors[(number - 1) % teacherColors.length],
+          status: teacher.status,
+          specializations: teacher.specializations,
+          timetable: [],
+          qualification: teacher.qualification,
+          teachingLoad: 20,
+          currentSubLoad: 0,
+          honorariumRate: 120,
+          requiredPrepMinutes: 30,
+          subjectPreferences: [],
+          preferredGrades: [],
+          preferredPeriods: [],
+        };
+      });
+      const updatedTeachers = [...teacherRecords, ...addedTeachers];
+      setTeacherRecords(updatedTeachers);
+      runMatching(updatedTeachers, false);
+      setActiveView("Teachers");
+      setNotice(`${addedTeachers.length} teacher${addedTeachers.length === 1 ? "" : "s"} imported.`);
+    } catch (error) {
+      if (!(error instanceof Error)) throw error;
+      setNotice(error.message);
+    }
+    window.setTimeout(() => setNotice(""), 3200);
+  }
+
   const navigation: Array<{ label: View; icon: IconName; badge?: number }> = [
     { label: "Overview", icon: "grid" },
     {
@@ -1116,6 +1189,7 @@ export default function Home() {
               teachers={filteredTeachers}
               search={search}
               onSearch={setSearch}
+              onImport={importTeachers}
               onAdd={() => {
                 setEditingTeacher(null);
                 setShowTeacherForm(true);
@@ -3107,6 +3181,7 @@ function TeachersDirectory({
   teachers: visibleTeachers,
   search,
   onSearch,
+  onImport,
   onAdd,
   onEdit,
   onViewSchedule,
@@ -3114,36 +3189,33 @@ function TeachersDirectory({
   teachers: typeof teachers;
   search: string;
   onSearch: (value: string) => void;
+  onImport: (file: File) => Promise<void>;
   onAdd: () => void;
   onEdit: (teacher: Teacher) => void;
   onViewSchedule: (teacher: Teacher) => void;
 }) {
-  function exportTeachers() {
-    const header = ["Name", "Status", "Specializations", "Level / qualification", "Substitute load"];
-    const rows = visibleTeachers.map((teacher) => [
-      teacher.name,
-      teacher.status,
-      teacher.specializations.join("; "),
-      teacher.qualification,
-      String(teacher.currentSubLoad),
-    ]);
-    const csv = [header, ...rows]
-      .map((row) => row.map((field) => `"${field.replaceAll('"', '""')}"`).join(","))
-      .join("\r\n");
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "subjtitute-teachers.csv";
-    link.click();
-    URL.revokeObjectURL(url);
+  const importFileInput = useRef<HTMLInputElement>(null);
+
+  async function handleImport(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (file) await onImport(file);
   }
 
   return (
     <>
-      <PageHeading eyebrow="PEOPLE & AVAILABILITY" title="Your teachers" description="A clear view of subject expertise and current substitute capacity." actions={<><Button variant="secondary" onClick={exportTeachers}><Icon name="arrow" size={17} /> Export list</Button><Button onClick={onAdd}><Icon name="plus" size={17} /> Add teacher</Button></>} />
+      <input
+        ref={importFileInput}
+        accept=".csv,text/csv"
+        className="visually-hidden"
+        onChange={handleImport}
+        type="file"
+        aria-label="Import teachers from CSV"
+      />
+      <PageHeading eyebrow="PEOPLE & AVAILABILITY" title="Your teachers" description="A clear view of subject expertise and current substitute capacity." actions={<><Button variant="secondary" onClick={() => importFileInput.current?.click()}><Icon name="upload" size={17} /> Import CSV</Button><Button onClick={onAdd}><Icon name="plus" size={17} /> Add teacher</Button></>} />
       <div className="subpage-stats"><StatCard label="Teachers shown" value={String(visibleTeachers.length).padStart(2, "0")} change={search ? "Matching your search" : "Across 4 departments"} icon="users" tone="blue" /><StatCard label="Available now" value={String(visibleTeachers.filter((teacher) => teacher.status === "available").length).padStart(2, "0")} change="Ready for matching" icon="check" tone="mint" /><StatCard label="Qualification levels" value={String(new Set(visibleTeachers.map((teacher) => teacher.qualification.trim()).filter(Boolean)).size)} change="Distinct levels recorded" icon="chart" tone="yellow" /></div>
       <div className="panel directory-panel">
-        <div className="panel-heading"><div><div className="panel-title-row"><h2>Teacher directory</h2><span className="count-pill">{visibleTeachers.length}</span></div><p>Search by name or subject specialization.</p></div><label className="directory-search"><Icon name="search" size={17} /><input aria-label="Search teachers or subjects" placeholder="Search teachers..." value={search} onChange={(event) => onSearch(event.target.value)} /></label></div>
+        <div className="panel-heading"><div><div className="panel-title-row"><h2>Teacher directory</h2><span className="count-pill">{visibleTeachers.length}</span></div><p>Search by name or subject specialization. CSV columns: Name, Status, Specializations, and Level / qualification. Separate subjects with semicolons.</p></div><label className="directory-search"><Icon name="search" size={17} /><input aria-label="Search teachers or subjects" placeholder="Search teachers..." value={search} onChange={(event) => onSearch(event.target.value)} /></label></div>
         <div className="table-wrap">
           <table className="request-table teacher-table">
             <thead><tr><th>TEACHER</th><th>SUBJECT SPECIALIZATIONS</th><th>LEVEL / QUALIFICATION</th><th>SUB LOAD</th><th>STATUS</th><th /></tr></thead>

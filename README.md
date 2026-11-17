@@ -42,8 +42,12 @@ eligibility. Edits refresh open match recommendations.
 In Match results, select **Use** on a ranked alternative before confirming;
 alternatives are blocked if they would conflict with an assignment or workload
 limit. Teacher and request changes are held in browser memory for this
-prototype and reset when the page is refreshed. Teacher search and CSV export
-are also available there.
+prototype and reset when the page is refreshed. Teacher search and CSV import
+are also available there. Import a CSV with `Name`, `Status`,
+`Specializations`, and `Level / qualification` columns; separate multiple
+specializations with semicolons. Imports append teachers, start them with an
+empty timetable and zero substitute load, and validate every row before adding
+any teachers.
 
 The app opens with a demo administrator login (`admin` / `adminaccess`). After a
 successful sign-in, the app displays a logo-writing loading animation. Teachers
