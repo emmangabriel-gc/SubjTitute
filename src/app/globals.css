@@ -192,7 +192,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .directory-panel .request-table tbody td { height: 66px; }
 .status-tag { display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 5px 8px; border: 0; border-radius: 6px; font-size: 9px; font-weight: 650; white-space: nowrap; }
 .status-confirmed { background: #eaffed; color: #39884a; }
-.status-substitute { background: #e6f4ff; color: #2478b8; }
+.status-substitute { background: #fff8cc; color: #806600; }
 .status-pending { background: #fff6d3; color: #92741c; cursor: pointer; }
 .status-pending:hover { background: #ffefad; }
 .status-unfilled { background: #fff0f1; color: #c84c57; }
@@ -221,7 +221,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .schedule-table { min-width: 860px; }
 .schedule-table tbody td { height: auto; min-height: 48px; padding-top: 12px; padding-bottom: 12px; }
 .schedule-absence-row td { background: #fff0f1; color: #a63e49 !important; }
-.schedule-substitute-row td { background: #f0f8ff; }
+.schedule-substitute-row td { background: #fffdf0; }
 .schedule-modal-note { margin: 14px 0 0; color: #858692; font-size: 10px; line-height: 1.5; }
 
 .results-banner { display: flex; align-items: center; gap: 13px; padding: 16px 20px; background: #edffef; border: 1px solid #d5f8d9; border-radius: 12px; margin-bottom: 16px; }
@@ -797,8 +797,8 @@ html[data-theme="dark"] .schedule-modal-close { background: #222f3b; color: var(
 html[data-theme="dark"] .login-password-toggle { color: #aab8c3; }
 html[data-theme="dark"] .login-password-toggle:hover { background: #2a3743; color: var(--foreground); }
 html[data-theme="dark"] .schedule-absence-row td { background: #3c252b; color: #ff9aa1 !important; }
-html[data-theme="dark"] .schedule-substitute-row td { background: #203746; }
-html[data-theme="dark"] .status-substitute { background: #243f51; color: #9bd6ff; }
+html[data-theme="dark"] .schedule-substitute-row td { background: #302d1f; }
+html[data-theme="dark"] .status-substitute { background: #423a20; color: #ffe978; }
 html[data-theme="dark"] .schedule-modal-note { color: #aab8c3; }
 html[data-theme="dark"] .mini-panel-tip,
 html[data-theme="dark"] .mini-panel-color { background: #222f3b; }

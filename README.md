@@ -23,7 +23,7 @@ All teacher accounts, existing and new, use the shared login password
 preferences, or regular timetable periods and their subjects. Subjects appear
 in the schedule table when you click a teacher's name. Confirmed substitute
 classes appear there with a **Substitute** status until their scheduled end
-time, and the teacher directory shows that status until the assignment ends.
+time. The teacher directory status remains unchanged.
 In the teacher form, select **Import timetable** to import either an `.xlsx`
 workbook based on the provided template or a CSV file. For Excel files, the
 form reads the `Timetable` sheet: enter a teacher name and add subjects to the

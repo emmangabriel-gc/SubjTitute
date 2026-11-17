@@ -11,7 +11,6 @@ import {
   addApprovedLeaveToTimetables,
   getTeacherStatusForDate,
   hasSubstitutionEnded,
-  isSubstitutionInProgress,
 } from "@/lib/teacher-leave";
 import type { TeacherLeaveApplication, TeacherLeaveSession } from "@/lib/teacher-leave";
 import { parseTimetableCsv } from "@/lib/timetable-csv";
@@ -378,29 +377,6 @@ export default function Home() {
           Boolean(result.assignments[request.id]),
       ),
     [confirmed, requests, result.assignments],
-  );
-  const substituteTeacherIds = useMemo(() => {
-    if (!currentTime) return new Set<string>();
-    return new Set(
-      confirmedSubstitutionRequests.flatMap((request) => {
-        const teacherId = result.assignments[request.id];
-        return teacherId && !hasSubstitutionEnded(request, currentTime)
-          ? [teacherId]
-          : [];
-      }),
-    );
-  }, [confirmedSubstitutionRequests, currentTime, result.assignments]);
-  const activeSubstituteTeacherIds = useMemo(
-    () =>
-      new Set(
-        confirmedSubstitutionRequests.flatMap((request) => {
-          const teacherId = result.assignments[request.id];
-          return teacherId && currentTime && isSubstitutionInProgress(request, currentTime)
-            ? [teacherId]
-            : [];
-        }),
-      ),
-    [confirmedSubstitutionRequests, currentTime, result.assignments],
   );
   const displayTeachers = useMemo(
     () =>
@@ -1138,8 +1114,6 @@ export default function Home() {
           {activeView === "Teachers" && (
             <TeachersDirectory
               teachers={filteredTeachers}
-              substituteTeacherIds={substituteTeacherIds}
-              activeSubstituteTeacherIds={activeSubstituteTeacherIds}
               search={search}
               onSearch={setSearch}
               onAdd={() => {
@@ -3131,8 +3105,6 @@ function TeacherForm({
 
 function TeachersDirectory({
   teachers: visibleTeachers,
-  substituteTeacherIds,
-  activeSubstituteTeacherIds,
   search,
   onSearch,
   onAdd,
@@ -3140,8 +3112,6 @@ function TeachersDirectory({
   onViewSchedule,
 }: {
   teachers: typeof teachers;
-  substituteTeacherIds: Set<string>;
-  activeSubstituteTeacherIds: Set<string>;
   search: string;
   onSearch: (value: string) => void;
   onAdd: () => void;
@@ -3171,26 +3141,19 @@ function TeachersDirectory({
   return (
     <>
       <PageHeading eyebrow="PEOPLE & AVAILABILITY" title="Your teachers" description="A clear view of subject expertise and current substitute capacity." actions={<><Button variant="secondary" onClick={exportTeachers}><Icon name="arrow" size={17} /> Export list</Button><Button onClick={onAdd}><Icon name="plus" size={17} /> Add teacher</Button></>} />
-      <div className="subpage-stats"><StatCard label="Teachers shown" value={String(visibleTeachers.length).padStart(2, "0")} change={search ? "Matching your search" : "Across 4 departments"} icon="users" tone="blue" /><StatCard label="Available now" value={String(visibleTeachers.filter((teacher) => teacher.status === "available" && !activeSubstituteTeacherIds.has(teacher.id)).length).padStart(2, "0")} change="Ready for matching" icon="check" tone="mint" /><StatCard label="Qualification levels" value={String(new Set(visibleTeachers.map((teacher) => teacher.qualification.trim()).filter(Boolean)).size)} change="Distinct levels recorded" icon="chart" tone="yellow" /></div>
+      <div className="subpage-stats"><StatCard label="Teachers shown" value={String(visibleTeachers.length).padStart(2, "0")} change={search ? "Matching your search" : "Across 4 departments"} icon="users" tone="blue" /><StatCard label="Available now" value={String(visibleTeachers.filter((teacher) => teacher.status === "available").length).padStart(2, "0")} change="Ready for matching" icon="check" tone="mint" /><StatCard label="Qualification levels" value={String(new Set(visibleTeachers.map((teacher) => teacher.qualification.trim()).filter(Boolean)).size)} change="Distinct levels recorded" icon="chart" tone="yellow" /></div>
       <div className="panel directory-panel">
         <div className="panel-heading"><div><div className="panel-title-row"><h2>Teacher directory</h2><span className="count-pill">{visibleTeachers.length}</span></div><p>Search by name or subject specialization.</p></div><label className="directory-search"><Icon name="search" size={17} /><input aria-label="Search teachers or subjects" placeholder="Search teachers..." value={search} onChange={(event) => onSearch(event.target.value)} /></label></div>
         <div className="table-wrap">
           <table className="request-table teacher-table">
             <thead><tr><th>TEACHER</th><th>SUBJECT SPECIALIZATIONS</th><th>LEVEL / QUALIFICATION</th><th>SUB LOAD</th><th>STATUS</th><th /></tr></thead>
             <tbody>{visibleTeachers.map((teacher) => {
-              const isSubstitute = substituteTeacherIds.has(teacher.id);
-              const statusLabel = isSubstitute
-                ? "Substitute"
-                : teacher.status === "available"
-                  ? "Available"
-                  : teacher.status === "on_leave"
-                    ? "On leave"
-                    : "Inactive";
-              const statusClass = isSubstitute
-                ? "status-substitute"
-                : teacher.status === "available"
-                  ? "status-confirmed"
-                  : "status-unfilled";
+              const statusLabel = teacher.status === "available"
+                ? "Available"
+                : teacher.status === "on_leave"
+                  ? "On leave"
+                  : "Inactive";
+              const statusClass = teacher.status === "available" ? "status-confirmed" : "status-unfilled";
               return <tr key={teacher.id}>
                 <td><div className="table-teacher"><span className="teacher-avatar" style={{ backgroundColor: teacher.color }}>{teacher.initials}</span><div><button className="teacher-name-link" onClick={() => onViewSchedule(teacher)} type="button" aria-label={`View ${teacher.name}'s schedule`}>{teacher.name}</button><small>{teacher.id}</small></div></div></td>
                 <td><div className="subject-tags">{teacher.specializations.map((subject) => <span key={subject}>{subject}</span>)}</div></td>
