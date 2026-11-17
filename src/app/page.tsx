@@ -1,11 +1,12 @@
 "use client";
 
-import type { FormEvent, ReactNode } from "react";
+import type { ChangeEvent, FormEvent, ReactNode } from "react";
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { classRequests, teachers } from "@/lib/demo-data";
 import { matchSubstitutes, overlaps } from "@/lib/matching";
 import type { ClassRequest, MatchResult, Teacher } from "@/lib/matching/types";
+import { parseTimetableCsv } from "@/lib/timetable-csv";
 
 type View = "Overview" | "Absences" | "Teachers" | "Match results" | "Settings";
 type TeacherLeaveSession = {
@@ -2141,7 +2142,45 @@ function TeacherForm({
   const [timetable, setTimetable] = useState<Teacher["timetable"]>(
     () => teacher?.timetable.map((slot) => ({ ...slot })) ?? [],
   );
+  const [timetableImportMessage, setTimetableImportMessage] = useState("");
+  const timetableFileInput = useRef<HTMLInputElement>(null);
   const selectedPreferences = teacher?.subjectPreferences.join(", ") ?? "";
+
+  async function importTimetable(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (!file) return;
+    if (file.size > 1024 * 1024) {
+      setTimetableImportMessage("The CSV file must be smaller than 1 MB.");
+      return;
+    }
+
+    try {
+      const importedSlots = parseTimetableCsv(await file.text());
+      setTimetable(importedSlots);
+      setTimetableImportMessage(
+        `${importedSlots.length} periods imported. Saving this teacher will replace their existing regular periods.`,
+      );
+    } catch (error) {
+      if (error instanceof Error) {
+        setTimetableImportMessage(error.message);
+        return;
+      }
+      throw error;
+    }
+  }
+
+  function downloadTimetableTemplate() {
+    const template = "day,start,end\nMon,9:00 AM,10:00 AM\nTue,13:00,14:00\n";
+    const url = URL.createObjectURL(
+      new Blob([template], { type: "text/csv;charset=utf-8" }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "timetable-template.csv";
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
 
   function updateSlot(
     index: number,
@@ -2282,6 +2321,35 @@ function TeacherForm({
         <fieldset className="schedule-picker">
           <legend>Regular timetable <span>{timetable.length} periods</span></legend>
           <input type="hidden" name="timetable" value={JSON.stringify(timetable)} />
+          <input
+            ref={timetableFileInput}
+            accept=".csv,text/csv"
+            className="visually-hidden"
+            onChange={importTimetable}
+            type="file"
+          />
+          <div className="timetable-import-actions">
+            <button
+              className="button button-secondary"
+              onClick={() => timetableFileInput.current?.click()}
+              type="button"
+            >
+              Import CSV
+            </button>
+            <button
+              className="timetable-template-button"
+              onClick={downloadTimetableTemplate}
+              type="button"
+            >
+              Download template
+            </button>
+          </div>
+          <p className="timetable-import-hint">
+            CSV columns: <strong>day, start, end</strong>. Import replaces the periods shown below.
+          </p>
+          {timetableImportMessage && (
+            <p className="timetable-import-message" role="status">{timetableImportMessage}</p>
+          )}
           {timetable.length === 0 && <p className="empty-schedule">No regular busy periods added.</p>}
           {timetable.map((slot, index) => (
             <div className="schedule-period" key={`${index}-${slot.day}`}>

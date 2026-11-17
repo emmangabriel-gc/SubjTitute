@@ -20,7 +20,12 @@ weekday is detected automatically and each date can have its own class times.
 Add teachers from the Teachers page; enter each teacher's level/qualification.
 All teacher accounts, existing and new, use the shared login password
 `teacher`. Use **Edit** in the teacher directory to update details,
-preferences, or any number of regular timetable periods.
+preferences, or any number of regular timetable periods. In the teacher form,
+select **Import CSV** to replace a teacher's regular busy periods from a
+spreadsheet file. The CSV requires `day`, `start`, and `end` columns; weekday
+names or abbreviations and 12-hour or 24-hour times are accepted. Use
+**Download template** in the form for an example file. Imported rows are
+validated for invalid times and overlapping periods before they are applied.
 Qualifications are recorded for display and export; they do not affect matching
 scores. Edits refresh open match recommendations.
 In Match results, select **Use** on a ranked alternative before confirming;
