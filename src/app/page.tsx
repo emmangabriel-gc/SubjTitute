@@ -76,7 +76,6 @@ const teacherColors = [
   "#e4f9ec",
 ];
 const DEFAULT_BUDGET_CAP = 200;
-const DEFAULT_TEACHER_PASSWORD = "teacher";
 
 function localDateKey(date: Date): string {
   const year = date.getFullYear();
@@ -168,8 +167,8 @@ function formatTime(minutes: number): string {
 }
 
 function downloadLeaveProof(file: File) {
-  const url = URL.createObjectURL(file);
   const link = document.createElement("a");
+  const url = URL.createObjectURL(file);
   link.href = url;
   link.download = file.name;
   link.click();
@@ -320,6 +319,7 @@ export default function Home() {
   const [selectedScheduleTeacher, setSelectedScheduleTeacher] = useState<Teacher | null>(null);
   const [notice, setNotice] = useState("");
   const [isSignedIn, setIsSignedIn] = useState(false);
+  const [showPrototypeNotice, setShowPrototypeNotice] = useState(true);
   const [loginRole, setLoginRole] = useState<"admin" | "teacher">("admin");
   const [currentTeacherId, setCurrentTeacherId] = useState<string | null>(null);
   const [isLoginLoading, setIsLoginLoading] = useState(false);
@@ -401,35 +401,38 @@ export default function Home() {
     );
   }, [search, displayTeachers]);
 
-  function signIn(event: FormEvent<HTMLFormElement>) {
+  async function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const username = String(formData.get("username") ?? "").trim();
     const password = String(formData.get("password") ?? "");
-    const matchedTeacher = loginRole === "teacher"
-      ? teacherRecords.find((teacher) => teacher.id.toLowerCase() === username.toLowerCase())
-      : undefined;
-    const isValid = loginRole === "admin"
-      ? username === "admin" && password === "adminaccess"
-      : Boolean(matchedTeacher && password === DEFAULT_TEACHER_PASSWORD);
-
-    if (!isValid) {
-      setLoginError(
-        loginRole === "admin"
-          ? "The username or password is incorrect."
-          : "The teacher ID or password is incorrect.",
-      );
-      return;
-    }
-
     setLoginError("");
     setIsLoginLoading(true);
-    const signedInTeacherId = matchedTeacher?.id ?? null;
-    window.setTimeout(() => {
-      setCurrentTeacherId(signedInTeacherId);
+    try {
+      let teacherId: string | null;
+      if (loginRole === "admin") {
+        if (username.toLowerCase() !== "admin" || password !== "adminaccess") {
+          throw new Error("The username or password is incorrect.");
+        }
+        teacherId = null;
+      } else {
+        const teacher = teacherRecords.find(
+          (item) => item.id.toLowerCase() === username.toLowerCase(),
+        );
+        if (password !== "teacher" || !teacher) {
+          throw new Error("The teacher ID or password is incorrect.");
+        }
+        teacherId = teacher.id;
+      }
+
+      setCurrentTeacherId(teacherId);
       setIsSignedIn(true);
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 2200));
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : "Sign-in could not be completed.");
+    } finally {
       setIsLoginLoading(false);
-    }, 2200);
+    }
   }
 
   function signOut() {
@@ -600,29 +603,30 @@ export default function Home() {
     window.setTimeout(() => setNotice(""), 3200);
   }
 
-  function submitLeaveApplication(
+  async function submitLeaveApplication(
     teacherId: string,
     sessions: TeacherLeaveSession[],
     reasonDescription: string,
     proofs: File[],
-  ) {
-    if (!teacherRecords.some((teacher) => teacher.id === teacherId)) return;
+  ): Promise<void> {
+    if (!teacherRecords.some((teacher) => teacher.id === teacherId)) {
+      throw new Error("Your teacher account could not be found. Sign out and sign in again.");
+    }
+
     const nextNumber = leaveApplications.reduce((max, application) => {
       const number = Number(application.id.replace(/\D/g, ""));
-      return Number.isFinite(number) ? Math.max(max, number) : max;
+      return Number.isFinite(number) ? Math.max(number, max) : max;
     }, 0) + 1;
-    setLeaveApplications((current) => [
-      ...current,
-      {
-        id: `L${String(nextNumber).padStart(2, "0")}`,
-        teacherId,
-        sessions,
-        reasonDescription,
-        proofs,
-        status: "pending",
-        classRequestIds: [],
-      },
-    ]);
+    const application: TeacherLeaveApplication = {
+      id: `L${String(nextNumber).padStart(2, "0")}`,
+      teacherId,
+      sessions,
+      reasonDescription,
+      proofs,
+      status: "pending",
+      classRequestIds: [],
+    };
+    setLeaveApplications((current) => [...current, application]);
   }
 
   function approveLeaveApplication(applicationId: string) {
@@ -815,7 +819,7 @@ export default function Home() {
     setNotice(
       editingTeacher
         ? `${name}’s details updated and open requests rematched.`
-        : `${name} added with teacher ID ${savedTeacher.id}. Sign-in password: ${DEFAULT_TEACHER_PASSWORD}.`,
+        : `${name} added with teacher ID ${savedTeacher.id}. Use the shared demo password "teacher" to sign in.`,
     );
     window.setTimeout(() => setNotice(""), 3200);
   }
@@ -919,7 +923,7 @@ export default function Home() {
           <p className="login-copy">
             {loginRole === "admin"
               ? "Sign in to manage substitute teacher matching."
-              : `Use your teacher ID and the shared password "${DEFAULT_TEACHER_PASSWORD}".`}
+              : 'Use your teacher ID and the shared demo password "teacher".'}
           </p>
           <div className="login-role-picker" role="group" aria-label="Account type">
             <button
@@ -988,6 +992,40 @@ export default function Home() {
               : "Teacher sign-in is available after the admin creates your account."}
           </p>
         </section>
+        {showPrototypeNotice && (
+          <div className="modal-backdrop prototype-notice-backdrop">
+            <section
+              aria-labelledby="prototype-notice-title"
+              aria-modal="true"
+              className="prototype-notice"
+              role="dialog"
+            >
+              <span className="eyebrow">PROTOTYPE NOTICE</span>
+              <h2 id="prototype-notice-title">Built-in demo data</h2>
+              <p>
+                This prototype uses built-in teacher and timetable data. It
+                needs no database setup or real accounts and is intended to
+                demonstrate the substitute-matching algorithm.
+              </p>
+              <div className="prototype-credentials">
+                <p><strong>Administrator:</strong> admin / adminaccess</p>
+                <p><strong>Teacher:</strong> your teacher ID / teacher</p>
+              </div>
+              <p className="prototype-notice-footnote">
+                Changes are temporary and reset when the page is refreshed.
+                These sign-in credentials are for demonstration only.
+              </p>
+              <button
+                autoFocus
+                className="button button-primary prototype-notice-continue"
+                onClick={() => setShowPrototypeNotice(false)}
+                type="button"
+              >
+                Continue to login
+              </button>
+            </section>
+          </div>
+        )}
       </main>
     );
   }
@@ -1280,18 +1318,6 @@ function LoginLoading() {
   return (
     <main className="login-loading-shell" aria-live="polite">
       <section className="login-loading-card">
-        <div className="login-loading-brand">
-          <Image
-            className="login-loading-animation"
-            src="/loading-animation.gif"
-            alt=""
-            width={160}
-            height={160}
-            unoptimized
-            priority
-          />
-          <span className="login-loading-wordmark">subjtitute<span>.</span></span>
-        </div>
         <span className="eyebrow">SENIOR HIGH SCHOOL</span>
         <h1>Getting things ready</h1>
         <p>Your workspace is loading. This will only take a moment.</p>
@@ -1331,7 +1357,7 @@ function TeacherPortal({
     sessions: TeacherLeaveSession[],
     reasonDescription: string,
     proofs: File[],
-  ) => void;
+  ) => Promise<void>;
 }) {
   const [showLeaveForm, setShowLeaveForm] = useState(false);
   const [selectedSubstituteAssignmentId, setSelectedSubstituteAssignmentId] = useState<string | null>(null);
@@ -1590,8 +1616,8 @@ function TeacherPortal({
         <TeacherLeaveForm
           teacher={teacher}
           onClose={() => setShowLeaveForm(false)}
-          onSubmit={(sessions, reasonDescription, proofs) => {
-            onSubmitLeave(teacher.id, sessions, reasonDescription, proofs);
+          onSubmit={async (sessions, reasonDescription, proofs) => {
+            await onSubmitLeave(teacher.id, sessions, reasonDescription, proofs);
             setShowLeaveForm(false);
           }}
         />
@@ -1708,7 +1734,7 @@ function TeacherLeaveForm({
     sessions: TeacherLeaveSession[],
     reasonDescription: string,
     proofs: File[],
-  ) => void;
+  ) => Promise<void>;
   onClose: () => void;
 }) {
   const teacherSubjects = subjectOptions.filter((subject) =>
@@ -1780,7 +1806,7 @@ function TeacherLeaveForm({
     setFormError("");
   }
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const normalized = sessions.map((session) => ({
       ...session,
@@ -1822,7 +1848,13 @@ function TeacherLeaveForm({
       setFormError("Describe the reason for your leave.");
       return;
     }
-    onSubmit(normalized, reason, proofs);
+    try {
+      await onSubmit(normalized, reason, proofs);
+    } catch (error) {
+      setFormError(
+        error instanceof Error ? error.message : "Leave application could not be saved.",
+      );
+    }
   }
 
   return (
@@ -2613,13 +2645,17 @@ function PendingLeaveApplications({
 
   useEffect(
     () => () => {
-      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+      if (previewUrlRef.current?.startsWith("blob:")) {
+        URL.revokeObjectURL(previewUrlRef.current);
+      }
     },
     [],
   );
 
   function selectProof(file: File | null, index: number | null) {
-    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    if (previewUrlRef.current?.startsWith("blob:")) {
+      URL.revokeObjectURL(previewUrlRef.current);
+    }
     previewUrlRef.current = null;
     setSelectedProofIndex(index);
 
@@ -2973,7 +3009,7 @@ function TeacherForm({
           />
         </label>
         <p className="field-hint">
-          All teacher accounts use the shared login password <strong>{DEFAULT_TEACHER_PASSWORD}</strong>.
+          All teacher accounts use the shared demo password <strong>teacher</strong>.
           {teacher ? ` Teacher ID: ${teacher.id}.` : " A teacher ID will be generated after saving."}
         </p>
         <fieldset className="subject-picker">

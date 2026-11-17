@@ -1,6 +1,8 @@
 # SubjTitute
 
-A teacher-substitution matching prototype for Senior High School. The app starts with no stored data so you can enter your school's teachers, absences, and subject information before running the matcher.
+A teacher-substitution matching system for Senior High School. On first setup,
+the app preloads the supplied teacher CSV and timetable workbooks. Class absence
+requests start empty and can be added in the app.
 
 ## Run locally
 
@@ -9,16 +11,14 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Start by adding your own
-teachers from the Teachers page and by reporting absences from the Absences
-view. The matcher works from the data you enter in the browser and does not
-include any built-in sample records. Use **Report absence** to add a class
+Open [http://localhost:3000](http://localhost:3000). Review the preloaded
+teachers on the Teachers page, then use **Report absence** to add a class
 request, **Run matching** to calculate assignments, and **Confirm** to review
 a recommendation. When reporting absences, choose an existing teacher from
 the searchable teacher list and add each absent class date separately; the
 weekday is detected automatically and each date can have its own class times.
 Add teachers from the Teachers page; enter each teacher's level/qualification.
-All teacher accounts, existing and new, use the shared login password
+All teacher accounts, existing and new, use the shared demo password
 `teacher`. Use **Edit** in the teacher directory to update details,
 preferences, or regular timetable periods and their subjects. Subjects appear
 in the schedule table when you click a teacher's name. Confirmed substitute
@@ -41,18 +41,17 @@ master's degree 75%, and a doctorate 100%. Qualification does not determine
 eligibility. Edits refresh open match recommendations.
 In Match results, select **Use** on a ranked alternative before confirming;
 alternatives are blocked if they would conflict with an assignment or workload
-limit. Teacher and request changes are held in browser memory for this
-prototype and reset when the page is refreshed. Teacher search and CSV import
-are also available there. Import a CSV with `Name`, `Status`,
+limit. Teacher and request changes are kept in browser memory and reset when
+the page is refreshed. Teacher search and CSV import are also available there. Import a CSV with `Name`, `Status`,
 `Specializations`, and `Level / qualification` columns; separate multiple
 specializations with semicolons. Imports append teachers, start them with an
 empty timetable and zero substitute load, and validate every row before adding
 any teachers.
 
-The app opens with a demo administrator login (`admin` / `adminaccess`). After a
-successful sign-in, the app displays a logo-writing loading animation. Teachers
-can choose **Teacher** on the sign-in screen and use the ID generated when their
-account was created and the shared password `teacher`. The teacher
+Sign in as the administrator with `admin` / `adminaccess`. After a successful
+sign-in, the app displays a brief loading screen. Teachers can choose
+**Teacher** on the sign-in screen and use their displayed teacher ID with the
+shared password `teacher`. The teacher
 portal shows their reported absences and coverage progress, plus confirmed
 substitute assignments with clickable class details. It does not reveal a
 recommended substitute's name until an administrator confirms the match.
@@ -65,14 +64,23 @@ approval, confirmed substitutes can view and download those materials in their
 assignment details. Approval adds each session as a class request and runs
 matching, while substitute assignments still require the administrator's
 separate confirmation. Teachers can see whether each application is pending,
-approved, or declined. Reasons and files are held in browser memory and reset
-when the page is refreshed.
-This client-side login is only a UI gate for the prototype; teacher passwords,
-teacher records, and requests stay in browser memory and reset on refresh. This
-is not production authentication and does not protect data from access.
+approved, or declined. Leave applications and uploaded files are also kept only
+in browser memory and are lost when the page is refreshed.
 The interface uses the supplied SubjTitute logo and color palette. Use the
 theme control on the sign-in screen or in Settings to switch between light and
 dark mode; the selection is saved in this browser.
+
+## Data behavior
+
+The supplied teacher CSV and timetable workbooks are bundled as the app's
+built-in starting data. This version does not use a database or remote file
+storage. New teachers, reported absences, leave applications, and uploaded
+documents exist only until the page is refreshed; they are not shared across
+browsers or devices.
+
+The sign-in screen is only a client-side UI gate, not secure authentication.
+Built-in teacher names and schedules are included with the app and should not
+be treated as private when deployed publicly.
 
 ## Validate
 
