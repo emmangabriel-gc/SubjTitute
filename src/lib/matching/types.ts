@@ -48,7 +48,8 @@ export type ClassSideCriterion =
   | "teaching_load"
   | "notice_time"
   | "cost"
-  | "preference_list";
+  | "preference_list"
+  | "qualification";
 
 export type TeacherSideCriterion =
   | "subject_preference"

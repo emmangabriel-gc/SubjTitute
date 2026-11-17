@@ -21,13 +21,18 @@ Add teachers from the Teachers page; enter each teacher's level/qualification.
 All teacher accounts, existing and new, use the shared login password
 `teacher`. Use **Edit** in the teacher directory to update details,
 preferences, or any number of regular timetable periods. In the teacher form,
-select **Import CSV** to replace a teacher's regular busy periods from a
-spreadsheet file. The CSV requires `day`, `start`, and `end` columns; weekday
-names or abbreviations and 12-hour or 24-hour times are accepted. Use
-**Download template** in the form for an example file. Imported rows are
+select **Import timetable** to import either an `.xlsx` workbook based on the
+provided template or a CSV file. For Excel files, the form reads the
+`Timetable` sheet: enter a teacher name and add subjects to the weekday columns;
+each filled subject cell becomes a busy period. The grade and section columns
+are for reference. Use **Download Excel template** in the form to get the
+workbook. CSV files still require `day`, `start`, and `end` columns; weekday
+names or abbreviations and 12-hour or 24-hour times are accepted. Imports are
 validated for invalid times and overlapping periods before they are applied.
-Qualifications are recorded for display and export; they do not affect matching
-scores. Edits refresh open match recommendations.
+Qualification levels affect class ranking as a 10% scoring factor: a bachelor's
+degree scores 25%, a bachelor's degree with professional education units 50%, a
+master's degree 75%, and a doctorate 100%. Qualification does not determine
+eligibility. Edits refresh open match recommendations.
 In Match results, select **Use** on a ranked alternative before confirming;
 alternatives are blocked if they would conflict with an assignment or workload
 limit. Teacher and request changes are held in browser memory for this
@@ -69,7 +74,7 @@ the supplied Python reference:
 1. Filter candidates using availability, schedule, subject expertise, notice,
    budget, and current substitute load.
 2. Score each eligible teacher for a class using min-max normalized workload,
-   notice, and cost, plus expertise and subject preference.
+   notice, and cost, plus expertise, subject preference, and qualification level.
 3. Score each class for a teacher using subject preference, grade, period,
    subject fit, and honorarium.
 4. Run class-proposing deferred acceptance. Teacher capacity and schedule

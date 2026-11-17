@@ -7,6 +7,7 @@ import { classRequests, teachers } from "@/lib/demo-data";
 import { matchSubstitutes, overlaps } from "@/lib/matching";
 import type { ClassRequest, MatchResult, Teacher } from "@/lib/matching/types";
 import { parseTimetableCsv } from "@/lib/timetable-csv";
+import { parseTimetableWorkbook } from "@/lib/timetable-workbook";
 
 type View = "Overview" | "Absences" | "Teachers" | "Match results" | "Settings";
 type TeacherLeaveSession = {
@@ -2139,6 +2140,7 @@ function TeacherForm({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onClose: () => void;
 }) {
+  const [teacherName, setTeacherName] = useState(teacher?.name ?? "");
   const [timetable, setTimetable] = useState<Teacher["timetable"]>(
     () => teacher?.timetable.map((slot) => ({ ...slot })) ?? [],
   );
@@ -2151,15 +2153,48 @@ function TeacherForm({
     event.currentTarget.value = "";
     if (!file) return;
     if (file.size > 1024 * 1024) {
-      setTimetableImportMessage("The CSV file must be smaller than 1 MB.");
+      setTimetableImportMessage("The timetable file must be smaller than 1 MB.");
       return;
     }
 
     try {
-      const importedSlots = parseTimetableCsv(await file.text());
+      let importedSlots: Teacher["timetable"];
+      let fileType: string;
+      if (file.name.toLowerCase().endsWith(".xlsx")) {
+        const { default: readXlsxFile } = await import("read-excel-file/browser");
+        const sheets = await readXlsxFile(file);
+        const timetableSheet = sheets.find(
+          ({ sheet }) => sheet.trim().toLowerCase() === "timetable",
+        );
+        if (!timetableSheet) {
+          throw new Error('The workbook must contain a sheet named "Timetable".');
+        }
+
+        const parsedWorkbook = parseTimetableWorkbook(timetableSheet.data);
+        if (
+          teacher &&
+          parsedWorkbook.teacherName &&
+          parsedWorkbook.teacherName.toLowerCase() !== teacher.name.trim().toLowerCase()
+        ) {
+          throw new Error(
+            `This timetable is for ${parsedWorkbook.teacherName}, not ${teacher.name}.`,
+          );
+        }
+        if (!teacher && parsedWorkbook.teacherName) {
+          setTeacherName(parsedWorkbook.teacherName);
+        }
+        importedSlots = parsedWorkbook.slots;
+        fileType = "Excel";
+      } else if (file.name.toLowerCase().endsWith(".csv")) {
+        importedSlots = parseTimetableCsv(await file.text());
+        fileType = "CSV";
+      } else {
+        throw new Error("Choose an Excel workbook (.xlsx) or a CSV timetable file.");
+      }
+
       setTimetable(importedSlots);
       setTimetableImportMessage(
-        `${importedSlots.length} periods imported. Saving this teacher will replace their existing regular periods.`,
+        `${importedSlots.length} busy periods imported from ${fileType}. Saving this teacher will replace their existing regular periods.`,
       );
     } catch (error) {
       if (error instanceof Error) {
@@ -2168,18 +2203,6 @@ function TeacherForm({
       }
       throw error;
     }
-  }
-
-  function downloadTimetableTemplate() {
-    const template = "day,start,end\nMon,9:00 AM,10:00 AM\nTue,13:00,14:00\n";
-    const url = URL.createObjectURL(
-      new Blob([template], { type: "text/csv;charset=utf-8" }),
-    );
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "timetable-template.csv";
-    link.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   function updateSlot(
@@ -2224,7 +2247,13 @@ function TeacherForm({
         </p>
         <label className="field-label">
           Teacher name
-          <input required name="name" defaultValue={teacher?.name ?? ""} placeholder="e.g. Alex Rivera" />
+          <input
+            required
+            name="name"
+            onChange={(event) => setTeacherName(event.target.value)}
+            placeholder="e.g. Alex Rivera"
+            value={teacherName}
+          />
         </label>
         <p className="field-hint">
           All teacher accounts use the shared login password <strong>{DEFAULT_TEACHER_PASSWORD}</strong>.
@@ -2323,7 +2352,7 @@ function TeacherForm({
           <input type="hidden" name="timetable" value={JSON.stringify(timetable)} />
           <input
             ref={timetableFileInput}
-            accept=".csv,text/csv"
+            accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
             className="visually-hidden"
             onChange={importTimetable}
             type="file"
@@ -2334,18 +2363,18 @@ function TeacherForm({
               onClick={() => timetableFileInput.current?.click()}
               type="button"
             >
-              Import CSV
+              Import timetable
             </button>
-            <button
+            <a
               className="timetable-template-button"
-              onClick={downloadTimetableTemplate}
-              type="button"
+              download
+              href="/timetable_template.xlsx"
             >
-              Download template
-            </button>
+              Download Excel template
+            </a>
           </div>
           <p className="timetable-import-hint">
-            CSV columns: <strong>day, start, end</strong>. Import replaces the periods shown below.
+            Fill the <strong>Timetable</strong> sheet with subjects; each class time becomes a busy period. CSV files with day, start, and end columns are also supported.
           </p>
           {timetableImportMessage && (
             <p className="timetable-import-message" role="status">{timetableImportMessage}</p>
@@ -2522,12 +2551,13 @@ function MatchResults({
                     {!confirmed.includes(request.id) && <Button variant="secondary" onClick={() => onConfirm(request.id)}><Icon name="check" size={16} /> Confirm match</Button>}
                   </div>
                   <div className="explanation-grid">
-                    <div><span>Subject expertise</span><strong>{percent(explanation.subject_expertise)}</strong><small>Weight 35%</small></div>
+                    <div><span>Subject expertise</span><strong>{percent(explanation.subject_expertise)}</strong><small>Weight 30%</small></div>
                     <div><span>Teacher preference</span><strong>{percent(explanation.preference_list)}</strong><small>Weight 20%</small></div>
                     <div><span>Substitute workload</span><strong>{percent(explanation.current_sub_load)}</strong><small>Weight 15%</small></div>
                     <div><span>Teaching load</span><strong>{percent(explanation.teaching_load)}</strong><small>Weight 10%</small></div>
                     <div><span>Notice time</span><strong>{percent(explanation.notice_time)}</strong><small>Weight 10%</small></div>
-                    <div><span>Honorarium fit</span><strong>{percent(explanation.cost)}</strong><small>Weight 10%</small></div>
+                    <div><span>Qualification</span><strong>{percent(explanation.qualification)}</strong><small>Weight 10%</small></div>
+                    <div><span>Honorarium fit</span><strong>{percent(explanation.cost)}</strong><small>Weight 5%</small></div>
                   </div>
                   <div className="alternates">
                     <span>TOP ALTERNATES</span>
@@ -2576,12 +2606,13 @@ function Settings({
   onToggleTheme: () => void;
 }) {
   const criteria = [
-    ["Subject expertise", 35, "#6BF178"],
+    ["Subject expertise", 30, "#6BF178"],
     ["Teacher preference", 20, "#35A7FF"],
     ["Substitute workload", 15, "#FFE74C"],
     ["Teaching load", 10, "#FF5964"],
     ["Notice time", 10, "#bdb5ff"],
-    ["Honorarium fit", 10, "#ffc98f"],
+    ["Qualification", 10, "#c9a7ff"],
+    ["Honorarium fit", 5, "#ffc98f"],
   ] as const;
   return (
     <>

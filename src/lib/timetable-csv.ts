@@ -69,13 +69,13 @@ function normalizeHeader(value: string): string {
   return value.trim().toLowerCase().replace(/[^a-z]/g, "");
 }
 
-function parseDay(value: string): string | undefined {
+export function parseTimetableDay(value: string): string | undefined {
   const normalized = value.trim().toLowerCase().replace(/\.$/, "");
   const index = dayNames.findIndex((names) => names.includes(normalized));
   return index < 0 ? undefined : weekDays[index];
 }
 
-function parseTime(value: string): number | undefined {
+export function parseTimetableTime(value: string): number | undefined {
   const normalized = value.trim();
   const twelveHour = /^(\d{1,2})(?::([0-5]\d))?\s*(AM|PM)$/i.exec(normalized);
   if (twelveHour) {
@@ -113,9 +113,9 @@ export function parseTimetableCsv(value: string): TimeSlot[] {
 
   const slots: TimeSlot[] = [];
   for (const { cells, line } of nonEmptyRows.slice(1)) {
-    const day = parseDay(cells[dayIndex] ?? "");
-    const start = parseTime(cells[startIndex] ?? "");
-    const end = parseTime(cells[endIndex] ?? "");
+    const day = parseTimetableDay(cells[dayIndex] ?? "");
+    const start = parseTimetableTime(cells[startIndex] ?? "");
+    const end = parseTimetableTime(cells[endIndex] ?? "");
     if (!day || start === undefined || end === undefined || end <= start) {
       throw new Error(`Invalid day or time on CSV row ${line}. Use a weekday and times such as 9:00 AM or 09:00.`);
     }

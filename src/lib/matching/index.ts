@@ -17,12 +17,13 @@ export const DEFAULT_POLICY: Policy = {
 
 export const DEFAULT_WEIGHTS: Weights = {
   classSide: {
-    subject_expertise: 0.35,
+    subject_expertise: 0.3,
     current_sub_load: 0.15,
     teaching_load: 0.1,
     notice_time: 0.1,
-    cost: 0.1,
+    cost: 0.05,
     preference_list: 0.2,
+    qualification: 0.1,
   },
   teacherSide: {
     subject_preference: 0.4,
@@ -166,5 +167,10 @@ export function matchSubstitutes(
   };
 }
 
-export { isEligible, overlaps, subjectExpertise } from "./eligibility";
+export {
+  isEligible,
+  overlaps,
+  qualificationScore,
+  subjectExpertise,
+} from "./eligibility";
 export type * from "./types";

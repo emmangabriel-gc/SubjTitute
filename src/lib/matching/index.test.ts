@@ -4,6 +4,7 @@ import {
   isEligible,
   matchSubstitutes,
   overlaps,
+  qualificationScore,
   subjectExpertise,
 } from "./index";
 import type { ClassRequest, Teacher } from "./types";
@@ -124,6 +125,18 @@ describe("eligibility", () => {
   });
 });
 
+describe("qualification scoring", () => {
+  it("scores the listed qualification levels in ascending order", () => {
+    expect(qualificationScore("Bachelor's degree")).toBe(0.25);
+    expect(
+      qualificationScore("Bachelor's degree with professional education units"),
+    ).toBe(0.5);
+    expect(qualificationScore("Master's degree")).toBe(0.75);
+    expect(qualificationScore("Doctorate")).toBe(1);
+    expect(qualificationScore("Unlisted qualification")).toBe(0);
+  });
+});
+
 describe("deferred acceptance matching", () => {
   it("keeps the Python reference sample assignments", () => {
     const mon = (start: number, end: number) => ({
@@ -231,5 +244,19 @@ describe("deferred acceptance matching", () => {
       [request("C1")],
     );
     expect(result.classRankings.C1[0][0]).toBe("T1");
+  });
+
+  it("ranks a more highly qualified teacher above an otherwise equal candidate", () => {
+    const result = matchSubstitutes(
+      [
+        teacher("T1", { qualification: "Bachelor's degree" }),
+        teacher("T2", { qualification: "Doctorate" }),
+      ],
+      [request("C1")],
+    );
+
+    expect(result.assignments.C1).toBe("T2");
+    expect(result.candidateExplanations.C1.T1.qualification).toBe(0.25);
+    expect(result.candidateExplanations.C1.T2.qualification).toBe(1);
   });
 });

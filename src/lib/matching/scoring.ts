@@ -1,4 +1,4 @@
-import { subjectExpertise } from "./eligibility";
+import { qualificationScore, subjectExpertise } from "./eligibility";
 import type {
   ClassRequest,
   Policy,
@@ -62,6 +62,12 @@ export function classSideScores(
         rankScore(request.subject, teacher.subjectPreferences),
       ]),
     ),
+    qualification: Object.fromEntries(
+      pool.map((teacher) => [
+        teacher.id,
+        qualificationScore(teacher.qualification),
+      ]),
+    ),
   };
   const higherIsBetter: Record<string, boolean> = {
     subject_expertise: true,
@@ -81,7 +87,9 @@ export function classSideScores(
     const high = Math.max(...numbers);
     for (const [teacherId, value] of Object.entries(values)) {
       normalized[teacherId][criterion] =
-        criterion === "subject_expertise" || criterion === "preference_list"
+        criterion === "subject_expertise" ||
+        criterion === "preference_list" ||
+        criterion === "qualification"
           ? value
           : minMax(value, low, high, higherIsBetter[criterion]);
     }

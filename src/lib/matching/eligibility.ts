@@ -16,6 +16,16 @@ export const SUBJECT_CATEGORY: Record<string, string> = {
   "Empowerment Technologies": "TechVoc",
 };
 
+export function qualificationScore(qualification: string): number {
+  const scores: Record<string, number> = {
+    "Bachelor's degree": 0.25,
+    "Bachelor's degree with professional education units": 0.5,
+    "Master's degree": 0.75,
+    Doctorate: 1,
+  };
+  return scores[qualification] ?? 0;
+}
+
 export function overlaps(left: TimeSlot, right: TimeSlot): boolean {
   if (
     left.day !== right.day ||
