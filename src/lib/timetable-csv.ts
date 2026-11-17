@@ -107,6 +107,7 @@ export function parseTimetableCsv(value: string): TimeSlot[] {
   const endIndex = headers.findIndex((header) =>
     ["end", "endtime"].includes(header),
   );
+  const subjectIndex = headers.findIndex((header) => header === "subject");
   if (dayIndex < 0 || startIndex < 0 || endIndex < 0) {
     throw new Error("CSV needs day, start, and end columns (weekday/start time/end time also work).");
   }
@@ -122,7 +123,8 @@ export function parseTimetableCsv(value: string): TimeSlot[] {
     if (slots.some((slot) => slot.day === day && start < slot.end && slot.start < end)) {
       throw new Error(`Overlapping periods found on CSV row ${line}. Resolve overlaps and import again.`);
     }
-    slots.push({ day, start, end });
+    const subject = subjectIndex < 0 ? "" : (cells[subjectIndex] ?? "").trim();
+    slots.push({ day, start, end, ...(subject ? { subject } : {}) });
   }
 
   if (slots.length === 0) throw new Error("The CSV has headers but no timetable periods.");

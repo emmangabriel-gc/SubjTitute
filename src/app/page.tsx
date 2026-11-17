@@ -7,8 +7,11 @@ import { classRequests, teachers } from "@/lib/demo-data";
 import { matchSubstitutes, overlaps } from "@/lib/matching";
 import type { ClassRequest, MatchResult, Teacher } from "@/lib/matching/types";
 import {
+  addConfirmedSubstitutionsToTimetables,
   addApprovedLeaveToTimetables,
   getTeacherStatusForDate,
+  hasSubstitutionEnded,
+  isSubstitutionInProgress,
 } from "@/lib/teacher-leave";
 import type { TeacherLeaveApplication, TeacherLeaveSession } from "@/lib/teacher-leave";
 import { parseTimetableCsv } from "@/lib/timetable-csv";
@@ -37,7 +40,9 @@ type IconName =
   | "shield"
   | "menu"
   | "moon"
-  | "sun";
+  | "sun"
+  | "eye"
+  | "eyeOff";
 
 const subjectOptions = [
   "General Mathematics",
@@ -100,6 +105,8 @@ const iconArtwork: Record<IconName, ReactNode> = {
   trend: <><path d="m3 17 6-6 4 4 8-8" /><path d="M15 7h6v6" /></>,
   shield: <><path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11Z" /><path d="m9 12 2 2 4-4" /></>,
   menu: <><path d="M4 6h16M4 12h16M4 18h16" /></>,
+  eye: <><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></>,
+  eyeOff: <><path d="m3 3 18 18M10.6 10.6a2 2 0 0 0 2.8 2.8" /><path d="M9.9 5.2A10.7 10.7 0 0 1 12 5c6.4 0 10 7 10 7a15.4 15.4 0 0 1-3.1 3.9M6.6 6.6A15.4 15.4 0 0 0 2 12s3.6 7 10 7a10.7 10.7 0 0 0 4.1-.8" /></>,
   moon: <path d="M20.9 13A9 9 0 0 1 11 3.1 9 9 0 1 0 20.9 13Z" />,
   sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" /></>,
 };
@@ -158,6 +165,25 @@ function formatTime(minutes: number): string {
   return `${displayHour}:${String(minute).padStart(2, "0")} ${hour < 12 ? "AM" : "PM"}`;
 }
 
+function downloadLeaveProof(file: File) {
+  const url = URL.createObjectURL(file);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = file.name;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function leaveProofPreviewKind(file: File): "image" | "pdf" | null {
+  if (file.type.startsWith("image/")) return "image";
+  if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) return "pdf";
+  return null;
+}
+
+function isPdfFile(file: File): boolean {
+  return file.type === "application/pdf" || (!file.type && /\.pdf$/i.test(file.name));
+}
+
 function formatPeriod(request: ClassRequest): string {
   return `${formatTime(request.slot.start)} – ${formatTime(request.slot.end)}`;
 }
@@ -203,7 +229,13 @@ function updateMatchResult(
   previous: MatchResult,
 ): MatchResult {
   const pendingRequests = requests.filter((request) => request.status === "open");
-  const pendingResult = matchSubstitutes(teachers, pendingRequests);
+  const teachersWithSubstitutions = addConfirmedSubstitutionsToTimetables(
+    teachers,
+    requests,
+    previous.assignments,
+    new Date(),
+  );
+  const pendingResult = matchSubstitutes(teachersWithSubstitutions, pendingRequests);
   const pinnedRequests = requests.filter(
     (request) => request.status === "confirmed" && previous.assignments[request.id],
   );
@@ -261,6 +293,7 @@ function isTeacherTimetable(value: unknown): value is Teacher["timetable"] {
         typeof slot.day === "string" &&
         typeof slot.start === "number" &&
         typeof slot.end === "number" &&
+        (!("subject" in slot) || typeof slot.subject === "string") &&
         (!("dateFrom" in slot) || typeof slot.dateFrom === "string") &&
         (!("dateTo" in slot) || typeof slot.dateTo === "string"),
     )
@@ -289,9 +322,11 @@ export default function Home() {
   const [currentTeacherId, setCurrentTeacherId] = useState<string | null>(null);
   const [isLoginLoading, setIsLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [today, setToday] = useState("");
+  const [currentTime, setCurrentTime] = useState<Date | null>(null);
 
   useEffect(() => {
     const savedTheme = window.localStorage.getItem("subjtitute-theme");
@@ -317,6 +352,13 @@ export default function Home() {
     return () => window.clearTimeout(timer);
   }, []);
 
+  useEffect(() => {
+    const refreshCurrentTime = () => setCurrentTime(new Date());
+    refreshCurrentTime();
+    const timer = window.setInterval(refreshCurrentTime, 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   function toggleTheme() {
     const nextDarkMode = !darkMode;
     setDarkMode(nextDarkMode);
@@ -327,6 +369,38 @@ export default function Home() {
   const openRequests = requests.filter((request) => request.status === "open");
   const pendingLeaveApplications = leaveApplications.filter(
     (application) => application.status === "pending",
+  );
+  const confirmedSubstitutionRequests = useMemo(
+    () =>
+      requests.filter(
+        (request) =>
+          (request.status === "confirmed" || confirmed.includes(request.id)) &&
+          Boolean(result.assignments[request.id]),
+      ),
+    [confirmed, requests, result.assignments],
+  );
+  const substituteTeacherIds = useMemo(() => {
+    if (!currentTime) return new Set<string>();
+    return new Set(
+      confirmedSubstitutionRequests.flatMap((request) => {
+        const teacherId = result.assignments[request.id];
+        return teacherId && !hasSubstitutionEnded(request, currentTime)
+          ? [teacherId]
+          : [];
+      }),
+    );
+  }, [confirmedSubstitutionRequests, currentTime, result.assignments]);
+  const activeSubstituteTeacherIds = useMemo(
+    () =>
+      new Set(
+        confirmedSubstitutionRequests.flatMap((request) => {
+          const teacherId = result.assignments[request.id];
+          return teacherId && currentTime && isSubstitutionInProgress(request, currentTime)
+            ? [teacherId]
+            : [];
+        }),
+      ),
+    [confirmedSubstitutionRequests, currentTime, result.assignments],
   );
   const displayTeachers = useMemo(
     () =>
@@ -473,11 +547,7 @@ export default function Home() {
     setTeacherRecords((current) =>
       current.map((teacher) =>
         teacher.id === teacherId
-          ? {
-              ...teacher,
-              currentSubLoad: teacher.currentSubLoad + 1,
-              timetable: [...teacher.timetable, confirmedRequest.slot],
-            }
+          ? { ...teacher, currentSubLoad: teacher.currentSubLoad + 1 }
           : teacher,
       ),
     );
@@ -551,7 +621,12 @@ export default function Home() {
     window.setTimeout(() => setNotice(""), 3200);
   }
 
-  function submitLeaveApplication(teacherId: string, sessions: TeacherLeaveSession[]) {
+  function submitLeaveApplication(
+    teacherId: string,
+    sessions: TeacherLeaveSession[],
+    reasonDescription: string,
+    proofs: File[],
+  ) {
     if (!teacherRecords.some((teacher) => teacher.id === teacherId)) return;
     const nextNumber = leaveApplications.reduce((max, application) => {
       const number = Number(application.id.replace(/\D/g, ""));
@@ -563,6 +638,8 @@ export default function Home() {
         id: `L${String(nextNumber).padStart(2, "0")}`,
         teacherId,
         sessions,
+        reasonDescription,
+        proofs,
         status: "pending",
         classRequestIds: [],
       },
@@ -589,6 +666,8 @@ export default function Home() {
         dateFrom: session.date,
         dateTo: session.date,
       },
+      lessonPlan: session.lessonPlan,
+      textbookPdfs: session.textbookPdfs,
       gradeLevel: session.gradeLevel,
       section: session.section,
       minutesUntilStart: 120,
@@ -705,7 +784,8 @@ export default function Home() {
           !Number.isFinite(slot.end) ||
           slot.start < 0 ||
           slot.end > 24 * 60 ||
-          slot.end <= slot.start,
+          slot.end <= slot.start ||
+          !slot.subject?.trim(),
       ) ||
       timetable.some((slot, index) =>
         timetable
@@ -826,16 +906,28 @@ export default function Home() {
                 required
               />
             </label>
-            <label className="login-field">
-              Password
-              <input
-                autoComplete="current-password"
-                name="password"
-                placeholder="Enter your password"
-                required
-                type="password"
-              />
-            </label>
+            <div className="login-field">
+              <label htmlFor="login-password">Password</label>
+              <span className="login-password-control">
+                <input
+                  autoComplete="current-password"
+                  id="login-password"
+                  name="password"
+                  placeholder="Enter your password"
+                  required
+                  type={showPassword ? "text" : "password"}
+                />
+                <button
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
+                  className="login-password-toggle"
+                  onClick={() => setShowPassword((visible) => !visible)}
+                  type="button"
+                >
+                  <Icon name={showPassword ? "eyeOff" : "eye"} size={17} />
+                </button>
+              </span>
+            </div>
             {loginError && <p className="login-error" role="alert">{loginError}</p>}
             <button className="button button-primary login-submit" type="submit">
               Sign in <Icon name="arrow" size={17} />
@@ -1046,6 +1138,8 @@ export default function Home() {
           {activeView === "Teachers" && (
             <TeachersDirectory
               teachers={filteredTeachers}
+              substituteTeacherIds={substituteTeacherIds}
+              activeSubstituteTeacherIds={activeSubstituteTeacherIds}
               search={search}
               onSearch={setSearch}
               onAdd={() => {
@@ -1120,6 +1214,10 @@ export default function Home() {
       {selectedScheduleTeacher && (
         <TeacherScheduleModal
           teacher={selectedScheduleTeacher}
+          substituteAssignments={confirmedSubstitutionRequests.filter(
+            (request) => result.assignments[request.id] === selectedScheduleTeacher.id,
+          )}
+          now={currentTime ?? new Date()}
           absences={requests.filter(
             (request) => request.absentTeacherId === selectedScheduleTeacher.id,
           )}
@@ -1180,10 +1278,24 @@ function TeacherPortal({
   darkMode: boolean;
   onToggleTheme: () => void;
   onSignOut: () => void;
-  onSubmitLeave: (teacherId: string, sessions: TeacherLeaveSession[]) => void;
+  onSubmitLeave: (
+    teacherId: string,
+    sessions: TeacherLeaveSession[],
+    reasonDescription: string,
+    proofs: File[],
+  ) => void;
 }) {
   const [showLeaveForm, setShowLeaveForm] = useState(false);
+  const [selectedSubstituteAssignmentId, setSelectedSubstituteAssignmentId] = useState<string | null>(null);
   const leaveRequests = requests.filter((request) => request.absentTeacherId === teacher.id);
+  const substituteAssignments = requests.filter(
+    (request) =>
+      (request.status === "confirmed" || confirmed.includes(request.id)) &&
+      result.assignments[request.id] === teacher.id,
+  );
+  const selectedSubstituteAssignment = substituteAssignments.find(
+    (request) => request.id === selectedSubstituteAssignmentId,
+  );
   const teacherApplications = leaveApplications.filter(
     (application) => application.teacherId === teacher.id,
   );
@@ -1252,6 +1364,44 @@ function TeacherPortal({
             tone="yellow"
           />
         </div>
+        <section className="panel teacher-assignment-panel">
+          <div className="panel-heading">
+            <div>
+              <h2>My substitute assignments</h2>
+              <p>Classes confirmed for you to cover.</p>
+            </div>
+            <span className="count-pill">{substituteAssignments.length}</span>
+          </div>
+          {substituteAssignments.length ? (
+            <div className="teacher-substitute-assignment-list">
+              {substituteAssignments.map((request) => (
+                <button
+                  aria-label={`View ${request.subject}, Grade ${request.gradeLevel} ${request.section} assignment details`}
+                  className="teacher-substitute-assignment"
+                  key={request.id}
+                  onClick={() => setSelectedSubstituteAssignmentId(request.id)}
+                  type="button"
+                >
+                  <span className="subject-badge">{request.subject.slice(0, 2).toUpperCase()}</span>
+                  <span className="teacher-substitute-assignment-copy">
+                    <span className="eyebrow">{request.id} · GRADE {request.gradeLevel} · {request.section}</span>
+                    <strong>{request.subject}</strong>
+                    <span>{formatDateRange(request) ?? request.slot.day} · {formatPeriod(request)}</span>
+                  </span>
+                  <span className="teacher-substitute-assignment-action">
+                    Class details <Icon name="chevron" size={15} />
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="teacher-coverage-empty">
+              <span className="empty-icon"><Icon name="book" size={18} /></span>
+              <strong>No substitute assignments yet</strong>
+              <span>Confirmed classes assigned to you will appear here.</span>
+            </div>
+          )}
+        </section>
         <section className="panel teacher-leave-panel">
           <div className="panel-heading">
             <div>
@@ -1293,6 +1443,10 @@ function TeacherPortal({
                         </div>
                       ))}
                     </div>
+                    <p className="leave-application-reason">
+                      <strong>Reason:</strong> {application.reasonDescription}
+                    </p>
+                    <LeaveProofList proofs={application.proofs} />
                     <p className="teacher-leave-status-copy">
                       {application.status === "pending"
                         ? "Waiting for an administrator to review this leave application."
@@ -1388,12 +1542,110 @@ function TeacherPortal({
         <TeacherLeaveForm
           teacher={teacher}
           onClose={() => setShowLeaveForm(false)}
-          onSubmit={(sessions) => {
-            onSubmitLeave(teacher.id, sessions);
+          onSubmit={(sessions, reasonDescription, proofs) => {
+            onSubmitLeave(teacher.id, sessions, reasonDescription, proofs);
             setShowLeaveForm(false);
           }}
         />
       )}
+      {selectedSubstituteAssignment && (
+        <SubstituteAssignmentDetails
+          absentTeacherName={
+            teacherRecords.find((item) => item.id === selectedSubstituteAssignment.absentTeacherId)?.name
+              ?? "Not specified"
+          }
+          onClose={() => setSelectedSubstituteAssignmentId(null)}
+          request={selectedSubstituteAssignment}
+        />
+      )}
+    </div>
+  );
+}
+
+function SubstituteAssignmentDetails({
+  request,
+  absentTeacherName,
+  onClose,
+}: {
+  request: ClassRequest;
+  absentTeacherName: string;
+  onClose: () => void;
+}) {
+  const textbookPdfs = request.textbookPdfs ?? [];
+
+  return (
+    <div className="modal-backdrop form-panel-backdrop" onClick={onClose}>
+      <section
+        aria-labelledby="substitute-assignment-title"
+        aria-modal="true"
+        className="absence-modal form-side-panel teacher-assignment-detail"
+        onClick={(event) => event.stopPropagation()}
+        role="dialog"
+      >
+        <div className="modal-heading">
+          <div>
+            <span className="eyebrow">CONFIRMED SUBSTITUTE ASSIGNMENT · {request.id}</span>
+            <h2 id="substitute-assignment-title">{request.subject}</h2>
+          </div>
+          <button
+            aria-label="Close assignment details"
+            className="schedule-modal-close"
+            onClick={onClose}
+            type="button"
+          >
+            <Icon name="x" size={18} />
+          </button>
+        </div>
+        <div className="teacher-assignment-detail-grid">
+          <div><span>Class</span><strong>Grade {request.gradeLevel} · {request.section}</strong></div>
+          <div><span>Date</span><strong>{formatDateRange(request) ?? request.slot.day}</strong></div>
+          <div><span>Time</span><strong>{formatPeriod(request)}</strong></div>
+          <div><span>Absent teacher</span><strong>{absentTeacherName}</strong></div>
+        </div>
+        <section className="teacher-assignment-lesson">
+          <h3>Lesson plan</h3>
+          <p>
+            {request.lessonPlan?.trim() || "No lesson instructions were provided for this class."}
+          </p>
+        </section>
+        <section className="teacher-assignment-textbooks">
+          <h3>Textbook PDFs</h3>
+          {textbookPdfs.length ? (
+            <ul className="teacher-leave-proof-list">
+              {textbookPdfs.map((file, index) => (
+                <li key={`${file.name}-${file.size}-${file.lastModified}-${index}`}>
+                  <span title={file.name}>{file.name}</span>
+                  <button type="button" onClick={() => downloadLeaveProof(file)}>
+                    Download PDF
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="teacher-assignment-no-materials">No textbook PDF was provided.</p>
+          )}
+        </section>
+      </section>
+    </div>
+  );
+}
+
+function LeaveProofList({ proofs }: { proofs: File[] }) {
+  if (proofs.length === 0) return null;
+
+  return (
+    <div className="leave-proof-list">
+      <strong>Supporting files</strong>
+      <ul>
+        {proofs.map((file, index) => (
+          <li key={`${file.name}-${file.size}-${file.lastModified}-${index}`}>
+            <span title={file.name}>{file.name}</span>
+            <button type="button" onClick={() => downloadLeaveProof(file)}>
+              Download
+            </button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -1404,13 +1656,22 @@ function TeacherLeaveForm({
   onClose,
 }: {
   teacher: Teacher;
-  onSubmit: (sessions: TeacherLeaveSession[]) => void;
+  onSubmit: (
+    sessions: TeacherLeaveSession[],
+    reasonDescription: string,
+    proofs: File[],
+  ) => void;
   onClose: () => void;
 }) {
+  const teacherSubjects = subjectOptions.filter((subject) =>
+    teacher.specializations.includes(subject),
+  );
   const [sessions, setSessions] = useState<TeacherLeaveSession[]>([
     {
       id: 0,
-      subject: subjectOptions[0],
+      subject: teacherSubjects[0] ?? "",
+      lessonPlan: "",
+      textbookPdfs: [],
       gradeLevel: 11,
       section: "",
       date: "",
@@ -1420,12 +1681,16 @@ function TeacherLeaveForm({
   ]);
   const [nextSessionId, setNextSessionId] = useState(1);
   const [formError, setFormError] = useState("");
+  const [reasonDescription, setReasonDescription] = useState("");
+  const [proofs, setProofs] = useState<File[]>([]);
+  const proofInputRef = useRef<HTMLInputElement>(null);
+  const textbookInputRefs = useRef(new Map<number, HTMLInputElement>());
   const startHours = Array.from({ length: 10 }, (_, index) => index + 7);
   const endHours = Array.from({ length: 10 }, (_, index) => index + 8);
 
   function updateSession(
     id: number,
-    property: keyof Omit<TeacherLeaveSession, "id">,
+    property: "subject" | "gradeLevel" | "section" | "date" | "startHour" | "endHour",
     value: string,
   ) {
     setSessions((current) =>
@@ -1441,11 +1706,38 @@ function TeacherLeaveForm({
     setFormError("");
   }
 
+  function updateLessonPlan(id: number, lessonPlan: string) {
+    setSessions((current) =>
+      current.map((session) => session.id === id ? { ...session, lessonPlan } : session),
+    );
+    setFormError("");
+  }
+
+  function addTextbookPdfs(id: number, event: ChangeEvent<HTMLInputElement>) {
+    const selectedFiles = Array.from(event.currentTarget.files ?? []);
+    event.currentTarget.value = "";
+    if (selectedFiles.length === 0) return;
+    if (selectedFiles.some((file) => !isPdfFile(file))) {
+      setFormError("Textbook materials must be PDF files.");
+      return;
+    }
+
+    setSessions((current) =>
+      current.map((session) =>
+        session.id === id
+          ? { ...session, textbookPdfs: [...session.textbookPdfs, ...selectedFiles] }
+          : session,
+      ),
+    );
+    setFormError("");
+  }
+
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const normalized = sessions.map((session) => ({
       ...session,
       section: session.section.trim(),
+      lessonPlan: session.lessonPlan.trim(),
     }));
     const sessionKeys = normalized.map((session) =>
       [
@@ -1459,7 +1751,10 @@ function TeacherLeaveForm({
     );
     const isInvalid = normalized.some(
       (session) =>
-        !subjectOptions.includes(session.subject) ||
+        !teacherSubjects.includes(session.subject) ||
+        !session.lessonPlan ||
+        session.textbookPdfs.length === 0 ||
+        session.textbookPdfs.some((file) => !isPdfFile(file)) ||
         (session.gradeLevel !== 11 && session.gradeLevel !== 12) ||
         !session.section ||
         !session.date ||
@@ -1471,20 +1766,25 @@ function TeacherLeaveForm({
         Number(session.endHour) <= Number(session.startHour),
     );
     if (isInvalid || new Set(sessionKeys).size !== sessionKeys.length) {
-      setFormError("Enter valid class details, dates, and times without duplicate sessions.");
+      setFormError("Enter valid class details, a lesson plan, and a textbook PDF for every session.");
       return;
     }
-    onSubmit(normalized);
+    const reason = reasonDescription.trim();
+    if (!reason) {
+      setFormError("Describe the reason for your leave.");
+      return;
+    }
+    onSubmit(normalized, reason, proofs);
   }
 
   return (
     <div
-      className="modal-backdrop"
+      className="modal-backdrop form-panel-backdrop"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <form className="absence-modal teacher-leave-form" onSubmit={submit}>
+      <form className="absence-modal teacher-leave-form form-side-panel" onSubmit={submit}>
         <div className="modal-heading">
           <div>
             <span className="eyebrow">LEAVE APPLICATION · {teacher.id}</span>
@@ -1497,6 +1797,70 @@ function TeacherLeaveForm({
         <p className="modal-copy">
           Add each class session affected by your leave. An administrator must approve your application before sessions go to matching.
         </p>
+        <label className="field-label">
+          Reason description
+          <textarea
+            className="teacher-leave-reason-input"
+            onChange={(event) => {
+              setReasonDescription(event.target.value);
+              setFormError("");
+            }}
+            placeholder="Describe why you are requesting leave."
+            required
+            rows={4}
+            value={reasonDescription}
+          />
+        </label>
+        <div className="field-label teacher-leave-upload">
+          <span>Supporting documents or pictures</span>
+          <span className="field-hint">Optional · PDF, Word, or image files</span>
+          <div className="teacher-leave-upload-control">
+            <button
+              className="teacher-leave-upload-button"
+              onClick={() => proofInputRef.current?.click()}
+              type="button"
+            >
+              Choose files
+            </button>
+            <span className="teacher-leave-upload-summary">
+              {proofs.length === 0 ? "No files selected" : `${proofs.length} ${proofs.length === 1 ? "file" : "files"} selected`}
+            </span>
+            <input
+              accept=".pdf,.doc,.docx,.odt,.rtf,image/*"
+              aria-label="Upload supporting documents or pictures"
+              className="teacher-leave-upload-input"
+              multiple
+              onChange={(event) => {
+                const selectedFiles = Array.from(event.target.files ?? []);
+                if (selectedFiles.length) {
+                  setProofs((current) => [...current, ...selectedFiles]);
+                  setFormError("");
+                }
+                event.target.value = "";
+              }}
+              ref={proofInputRef}
+              type="file"
+              hidden
+            />
+          </div>
+        </div>
+        {proofs.length > 0 && (
+          <ul className="teacher-leave-proof-list" aria-label="Selected proof files">
+            {proofs.map((file, index) => (
+              <li key={`${file.name}-${file.size}-${file.lastModified}-${index}`}>
+                <span title={file.name}>{file.name}</span>
+                <button
+                  className="teacher-leave-remove"
+                  onClick={() => setProofs((current) => current.filter((_, fileIndex) => fileIndex !== index))}
+                  type="button"
+                  aria-label={`Remove ${file.name}`}
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
         <div className="teacher-leave-form-sessions">
           {sessions.map((session, index) => (
             <fieldset className="teacher-leave-form-session" key={session.id}>
@@ -1519,7 +1883,11 @@ function TeacherLeaveForm({
                   required
                   value={session.subject}
                 >
-                  {subjectOptions.map((subject) => <option key={subject}>{subject}</option>)}
+                  {teacherSubjects.length === 0 ? (
+                    <option value="" disabled>No assigned subjects available</option>
+                  ) : (
+                    teacherSubjects.map((subject) => <option key={subject}>{subject}</option>)
+                  )}
                 </select>
               </label>
               <div className="form-grid">
@@ -1576,6 +1944,77 @@ function TeacherLeaveForm({
                   </select>
                 </label>
               </div>
+              <label className="field-label">
+                Lesson plan / topics for the substitute
+                <textarea
+                  className="teacher-leave-lesson-input"
+                  onChange={(event) => updateLessonPlan(session.id, event.target.value)}
+                  placeholder="Describe the lesson and what the substitute should cover."
+                  required
+                  rows={4}
+                  value={session.lessonPlan}
+                />
+              </label>
+              <div className="field-label teacher-leave-upload">
+                <span>Textbook PDF for this class</span>
+                <span className="field-hint">Required · PDF only</span>
+                <div className="teacher-leave-upload-control">
+                  <button
+                    className="teacher-leave-upload-button"
+                    onClick={() => textbookInputRefs.current.get(session.id)?.click()}
+                    type="button"
+                  >
+                    Choose PDF
+                  </button>
+                  <span className="teacher-leave-upload-summary">
+                    {session.textbookPdfs.length === 0
+                      ? "No textbook PDF selected"
+                      : `${session.textbookPdfs.length} ${session.textbookPdfs.length === 1 ? "PDF" : "PDFs"} selected`}
+                  </span>
+                  <input
+                    accept="application/pdf,.pdf"
+                    aria-label={`Textbook PDFs for class session ${index + 1}`}
+                    className="teacher-leave-upload-input"
+                    hidden
+                    multiple
+                    onChange={(event) => addTextbookPdfs(session.id, event)}
+                    ref={(input) => {
+                      if (input) textbookInputRefs.current.set(session.id, input);
+                      else textbookInputRefs.current.delete(session.id);
+                    }}
+                    type="file"
+                  />
+                </div>
+                {session.textbookPdfs.length > 0 && (
+                  <ul className="teacher-leave-proof-list" aria-label={`Textbook PDFs for class session ${index + 1}`}>
+                    {session.textbookPdfs.map((file, fileIndex) => (
+                      <li key={`${file.name}-${file.size}-${file.lastModified}-${fileIndex}`}>
+                        <span title={file.name}>{file.name}</span>
+                        <button
+                          aria-label={`Remove ${file.name}`}
+                          className="teacher-leave-remove"
+                          onClick={() => {
+                            setSessions((current) =>
+                              current.map((item) =>
+                                item.id === session.id
+                                  ? {
+                                      ...item,
+                                      textbookPdfs: item.textbookPdfs.filter((_, index) => index !== fileIndex),
+                                    }
+                                  : item,
+                              ),
+                            );
+                            setFormError("");
+                          }}
+                          type="button"
+                        >
+                          Remove
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </fieldset>
           ))}
         </div>
@@ -1586,7 +2025,9 @@ function TeacherLeaveForm({
               ...current,
               {
                 id: nextSessionId,
-                subject: subjectOptions[0],
+                subject: teacherSubjects[0] ?? "",
+                lessonPlan: "",
+                textbookPdfs: [],
                 gradeLevel: 11,
                 section: "",
                 date: "",
@@ -1655,12 +2096,12 @@ function AbsenceForm({
 
   return (
     <div
-      className="modal-backdrop"
+      className="modal-backdrop form-panel-backdrop"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <form className="absence-modal" onSubmit={onSubmit}>
+      <form className="absence-modal form-side-panel" onSubmit={onSubmit}>
         <div className="modal-heading">
           <div>
             <span className="eyebrow">NEW REQUEST</span>
@@ -2117,58 +2558,234 @@ function PendingLeaveApplications({
   onApprove: (applicationId: string) => void;
   onReject: (applicationId: string) => void;
 }) {
+  const [selectedApplicationId, setSelectedApplicationId] = useState<string | null>(null);
+  const [selectedProofIndex, setSelectedProofIndex] = useState<number | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const previewUrlRef = useRef<string | null>(null);
+
+  useEffect(
+    () => () => {
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    },
+    [],
+  );
+
+  function selectProof(file: File | null, index: number | null) {
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    previewUrlRef.current = null;
+    setSelectedProofIndex(index);
+
+    if (!file || !leaveProofPreviewKind(file)) {
+      setPreviewUrl(null);
+      return;
+    }
+
+    const url = URL.createObjectURL(file);
+    previewUrlRef.current = url;
+    setPreviewUrl(url);
+  }
+
+  function closeReview() {
+    selectProof(null, null);
+    setSelectedApplicationId(null);
+  }
+
+  function openReview(application: TeacherLeaveApplication) {
+    setSelectedApplicationId(application.id);
+    const firstProof = application.proofs[0] ?? null;
+    selectProof(firstProof, firstProof ? 0 : null);
+  }
+
+  function decide(handler: (applicationId: string) => void) {
+    const applicationId = selectedApplicationId;
+    if (!applicationId) return;
+    closeReview();
+    handler(applicationId);
+  }
+
+  const selectedApplication = applications.find(
+    (application) => application.id === selectedApplicationId,
+  );
+  const selectedTeacher = selectedApplication
+    ? teacherRecords.find((teacher) => teacher.id === selectedApplication.teacherId)
+    : undefined;
+  const selectedProof =
+    selectedApplication && selectedProofIndex !== null
+      ? selectedApplication.proofs[selectedProofIndex] ?? null
+      : null;
+  const selectedProofKind = selectedProof ? leaveProofPreviewKind(selectedProof) : null;
+
   if (applications.length === 0) return null;
 
   return (
-    <section className="panel leave-approvals-panel">
-      <div className="panel-heading">
-        <div>
-          <div className="panel-title-row">
-            <h2>Teacher leave applications</h2>
-            <span className="count-pill count-pill-coral">{applications.length}</span>
+    <>
+      <section className="panel leave-approvals-panel">
+        <div className="panel-heading">
+          <div>
+            <div className="panel-title-row">
+              <h2>Teacher leave applications</h2>
+              <span className="count-pill count-pill-coral">{applications.length}</span>
+            </div>
+            <p>Open a request to review its details and supporting documents.</p>
           </div>
-          <p>Review class sessions before they are added to matching.</p>
         </div>
-      </div>
-      <div className="leave-approval-list">
-        {applications.map((application) => {
-          const teacher = teacherRecords.find((item) => item.id === application.teacherId);
-          return (
-            <article className="leave-approval-card" key={application.id}>
-              <div className="leave-approval-heading">
-                <span className="teacher-avatar" style={{ backgroundColor: teacher?.color ?? "#e6f4ff" }}>
-                  {teacher?.initials ?? "T"}
-                </span>
-                <div>
-                  <strong>{teacher?.name ?? application.teacherId}</strong>
-                  <span>{application.id} · {application.sessions.length} class {application.sessions.length === 1 ? "session" : "sessions"}</span>
+        <div className="leave-approval-list">
+          {applications.map((application) => {
+            const teacher = teacherRecords.find((item) => item.id === application.teacherId);
+            return (
+              <article className="leave-approval-card" key={application.id}>
+                <button
+                  aria-label={`Review leave request ${application.id} for ${teacher?.name ?? application.teacherId}`}
+                  className="leave-approval-open"
+                  onClick={() => openReview(application)}
+                  type="button"
+                >
+                  <div className="leave-approval-heading">
+                    <span className="teacher-avatar" style={{ backgroundColor: teacher?.color ?? "#e6f4ff" }}>
+                      {teacher?.initials ?? "T"}
+                    </span>
+                    <div>
+                      <strong>{teacher?.name ?? application.teacherId}</strong>
+                      <span>{application.id} · {application.sessions.length} class {application.sessions.length === 1 ? "session" : "sessions"}</span>
+                    </div>
+                  </div>
+                  <div className="leave-approval-summary">
+                    <span>{application.reasonDescription || "No reason description provided."}</span>
+                    <strong>
+                      {application.proofs.length === 0
+                        ? "No supporting files"
+                        : `${application.proofs.length} supporting ${application.proofs.length === 1 ? "file" : "files"}`}
+                    </strong>
+                  </div>
+                  <span className="leave-approval-open-label">
+                    Review request <Icon name="chevron" size={15} />
+                  </span>
+                </button>
+              </article>
+            );
+          })}
+        </div>
+      </section>
+      {selectedApplication && (
+        <div
+          className="modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeReview();
+          }}
+        >
+          <section
+            aria-labelledby="leave-review-title"
+            aria-modal="true"
+            className="leave-review-modal"
+            role="dialog"
+          >
+            <div className="leave-review-modal-heading">
+              <div>
+                <span className="eyebrow">LEAVE APPLICATION</span>
+                <h2 id="leave-review-title">Review request</h2>
+                <p>{selectedTeacher?.name ?? selectedApplication.teacherId} · {selectedApplication.id}</p>
+              </div>
+              <button
+                aria-label="Close leave request"
+                className="leave-review-close"
+                onClick={closeReview}
+                type="button"
+              >
+                <Icon name="x" size={17} />
+              </button>
+            </div>
+            <div className="leave-review-layout">
+              <div className="leave-review-pane">
+                <h3>Reason for leave</h3>
+                <p className="leave-application-reason">
+                  {selectedApplication.reasonDescription || "No reason description provided."}
+                </p>
+                <h3>Affected class sessions</h3>
+                <div className="leave-approval-sessions">
+                  {selectedApplication.sessions.map((session) => (
+                    <div className="leave-approval-session" key={session.id}>
+                      <strong>{session.subject}</strong>
+                      <span>Grade {session.gradeLevel} · {session.section}</span>
+                      <span>
+                        {weekdayForDate(session.date)} · {formatDate(session.date)} ·{" "}
+                        {formatTime(Number(session.startHour) * 60)}–{formatTime(Number(session.endHour) * 60)}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </div>
-              <div className="leave-approval-sessions">
-                {application.sessions.map((session) => (
-                  <div className="leave-approval-session" key={session.id}>
-                    <strong>{session.subject}</strong>
-                    <span>Grade {session.gradeLevel} · {session.section}</span>
-                    <span>
-                      {weekdayForDate(session.date)} · {formatDate(session.date)} ·{" "}
-                      {formatTime(Number(session.startHour) * 60)}–{formatTime(Number(session.endHour) * 60)}
-                    </span>
-                  </div>
-                ))}
+              <div className="leave-review-pane leave-review-files">
+                <h3>Supporting documents</h3>
+                {selectedApplication.proofs.length === 0 ? (
+                  <div className="leave-review-empty">No documents or pictures were attached.</div>
+                ) : (
+                  <>
+                    <ul className="leave-review-file-list">
+                      {selectedApplication.proofs.map((file, index) => (
+                        <li key={`${file.name}-${file.size}-${file.lastModified}-${index}`}>
+                          <button
+                            aria-pressed={selectedProofIndex === index}
+                            className={`leave-review-file-select${selectedProofIndex === index ? " is-active" : ""}`}
+                            onClick={() => selectProof(file, index)}
+                            title={file.name}
+                            type="button"
+                          >
+                            <span>{file.name}</span>
+                          </button>
+                          <button
+                            className="leave-review-file-download"
+                            onClick={() => downloadLeaveProof(file)}
+                            type="button"
+                          >
+                            Download
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                    {selectedProof && previewUrl && selectedProofKind === "image" ? (
+                      <div className="leave-review-image-frame">
+                        <Image
+                          alt={`Preview of ${selectedProof.name}`}
+                          className="leave-review-image"
+                          fill
+                          sizes="(max-width: 650px) 100vw, 45vw"
+                          src={previewUrl}
+                          unoptimized
+                        />
+                      </div>
+                    ) : selectedProof && previewUrl && selectedProofKind === "pdf" ? (
+                      <iframe
+                        className="leave-review-pdf"
+                        src={previewUrl}
+                        title={`Preview of ${selectedProof.name}`}
+                      />
+                    ) : selectedProof ? (
+                      <div className="leave-review-unavailable">
+                        <strong>Preview unavailable</strong>
+                        <span>This file type can be downloaded for review.</span>
+                        <Button variant="secondary" onClick={() => downloadLeaveProof(selectedProof)}>
+                          Download {selectedProof.name}
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="leave-review-empty">Select a file to view it here.</div>
+                    )}
+                  </>
+                )}
               </div>
-              <div className="leave-approval-actions">
-                <Button variant="quiet" onClick={() => onReject(application.id)}>
-                  Decline
-                </Button>
-                <Button onClick={() => onApprove(application.id)}>
-                  <Icon name="check" size={15} /> Approve and add to matching
-                </Button>
-              </div>
-            </article>
-          );
-        })}
-      </div>
-    </section>
+            </div>
+            <div className="leave-review-actions">
+              <Button variant="quiet" onClick={() => decide(onReject)}>
+                Decline
+              </Button>
+              <Button onClick={() => decide(onApprove)}>
+                <Icon name="check" size={15} /> Approve and add to matching
+              </Button>
+            </div>
+          </section>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -2259,7 +2876,7 @@ function TeacherForm({
 
   function updateSlot(
     index: number,
-    property: "day" | "start" | "end",
+    property: "day" | "start" | "end" | "subject",
     value: string,
   ) {
     setTimetable((current) =>
@@ -2268,7 +2885,7 @@ function TeacherForm({
           ? {
               ...slot,
               [property]:
-                property === "day"
+                property === "day" || property === "subject"
                   ? value
                   : timeToMinutes(value),
             }
@@ -2279,12 +2896,12 @@ function TeacherForm({
 
   return (
     <div
-      className="modal-backdrop"
+      className="modal-backdrop form-panel-backdrop"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <form className="absence-modal teacher-modal" onSubmit={onSubmit}>
+      <form className="absence-modal teacher-modal form-side-panel" onSubmit={onSubmit}>
         <div className="modal-heading">
           <div>
             <span className="eyebrow">TEACHER DIRECTORY</span>
@@ -2426,7 +3043,7 @@ function TeacherForm({
             </a>
           </div>
           <p className="timetable-import-hint">
-            Fill the <strong>Timetable</strong> sheet with subjects; each class time becomes a busy period. CSV files with day, start, and end columns are also supported.
+            Add a subject to every period. CSV files require day, start, and end columns and may include a subject column.
           </p>
           {timetableImportMessage && (
             <p className="timetable-import-message" role="status">{timetableImportMessage}</p>
@@ -2434,6 +3051,21 @@ function TeacherForm({
           {timetable.length === 0 && <p className="empty-schedule">No regular busy periods added.</p>}
           {timetable.map((slot, index) => (
             <div className="schedule-period" key={`${index}-${slot.day}`}>
+              <label className="field-label">
+                Subject
+                <select
+                  aria-label={`Timetable period ${index + 1} subject`}
+                  required
+                  value={slot.subject ?? ""}
+                  onChange={(event) => updateSlot(index, "subject", event.target.value)}
+                >
+                  <option value="" disabled>Select a subject</option>
+                  {slot.subject && !subjectOptions.includes(slot.subject) && (
+                    <option value={slot.subject}>{slot.subject}</option>
+                  )}
+                  {subjectOptions.map((subject) => <option key={subject}>{subject}</option>)}
+                </select>
+              </label>
               <label className="field-label">
                 Weekday
                 <select
@@ -2478,7 +3110,7 @@ function TeacherForm({
             onClick={() =>
               setTimetable((current) => [
                 ...current,
-                { day: "Mon", start: 9 * 60, end: 10 * 60 },
+                { day: "Mon", start: 9 * 60, end: 10 * 60, subject: "" },
               ])
             }
           >
@@ -2499,6 +3131,8 @@ function TeacherForm({
 
 function TeachersDirectory({
   teachers: visibleTeachers,
+  substituteTeacherIds,
+  activeSubstituteTeacherIds,
   search,
   onSearch,
   onAdd,
@@ -2506,6 +3140,8 @@ function TeachersDirectory({
   onViewSchedule,
 }: {
   teachers: typeof teachers;
+  substituteTeacherIds: Set<string>;
+  activeSubstituteTeacherIds: Set<string>;
   search: string;
   onSearch: (value: string) => void;
   onAdd: () => void;
@@ -2535,20 +3171,35 @@ function TeachersDirectory({
   return (
     <>
       <PageHeading eyebrow="PEOPLE & AVAILABILITY" title="Your teachers" description="A clear view of subject expertise and current substitute capacity." actions={<><Button variant="secondary" onClick={exportTeachers}><Icon name="arrow" size={17} /> Export list</Button><Button onClick={onAdd}><Icon name="plus" size={17} /> Add teacher</Button></>} />
-      <div className="subpage-stats"><StatCard label="Teachers shown" value={String(visibleTeachers.length).padStart(2, "0")} change={search ? "Matching your search" : "Across 4 departments"} icon="users" tone="blue" /><StatCard label="Available now" value={String(visibleTeachers.filter((teacher) => teacher.status === "available").length).padStart(2, "0")} change="Ready for matching" icon="check" tone="mint" /><StatCard label="Qualification levels" value={String(new Set(visibleTeachers.map((teacher) => teacher.qualification.trim()).filter(Boolean)).size)} change="Distinct levels recorded" icon="chart" tone="yellow" /></div>
+      <div className="subpage-stats"><StatCard label="Teachers shown" value={String(visibleTeachers.length).padStart(2, "0")} change={search ? "Matching your search" : "Across 4 departments"} icon="users" tone="blue" /><StatCard label="Available now" value={String(visibleTeachers.filter((teacher) => teacher.status === "available" && !activeSubstituteTeacherIds.has(teacher.id)).length).padStart(2, "0")} change="Ready for matching" icon="check" tone="mint" /><StatCard label="Qualification levels" value={String(new Set(visibleTeachers.map((teacher) => teacher.qualification.trim()).filter(Boolean)).size)} change="Distinct levels recorded" icon="chart" tone="yellow" /></div>
       <div className="panel directory-panel">
         <div className="panel-heading"><div><div className="panel-title-row"><h2>Teacher directory</h2><span className="count-pill">{visibleTeachers.length}</span></div><p>Search by name or subject specialization.</p></div><label className="directory-search"><Icon name="search" size={17} /><input aria-label="Search teachers or subjects" placeholder="Search teachers..." value={search} onChange={(event) => onSearch(event.target.value)} /></label></div>
         <div className="table-wrap">
           <table className="request-table teacher-table">
             <thead><tr><th>TEACHER</th><th>SUBJECT SPECIALIZATIONS</th><th>LEVEL / QUALIFICATION</th><th>SUB LOAD</th><th>STATUS</th><th /></tr></thead>
-            <tbody>{visibleTeachers.map((teacher) => <tr key={teacher.id}>
-              <td><div className="table-teacher"><span className="teacher-avatar" style={{ backgroundColor: teacher.color }}>{teacher.initials}</span><div><button className="teacher-name-link" onClick={() => onViewSchedule(teacher)} type="button" aria-label={`View ${teacher.name}'s schedule`}>{teacher.name}</button><small>{teacher.id}</small></div></div></td>
-              <td><div className="subject-tags">{teacher.specializations.map((subject) => <span key={subject}>{subject}</span>)}</div></td>
-              <td>{teacher.qualification}</td>
-              <td><span className="sub-load">{teacher.currentSubLoad}<small> / 3</small></span></td>
-              <td><span className={`status-tag ${teacher.status === "available" ? "status-confirmed" : "status-unfilled"}`}><span className="status-dot" />{teacher.status === "available" ? "Available" : teacher.status === "on_leave" ? "On leave" : "Inactive"}</span></td>
-              <td><button className="edit-teacher-button" onClick={() => onEdit(teacher)} aria-label={`Edit ${teacher.name}`}><Icon name="settings" size={15} /> Edit</button></td>
-            </tr>)}
+            <tbody>{visibleTeachers.map((teacher) => {
+              const isSubstitute = substituteTeacherIds.has(teacher.id);
+              const statusLabel = isSubstitute
+                ? "Substitute"
+                : teacher.status === "available"
+                  ? "Available"
+                  : teacher.status === "on_leave"
+                    ? "On leave"
+                    : "Inactive";
+              const statusClass = isSubstitute
+                ? "status-substitute"
+                : teacher.status === "available"
+                  ? "status-confirmed"
+                  : "status-unfilled";
+              return <tr key={teacher.id}>
+                <td><div className="table-teacher"><span className="teacher-avatar" style={{ backgroundColor: teacher.color }}>{teacher.initials}</span><div><button className="teacher-name-link" onClick={() => onViewSchedule(teacher)} type="button" aria-label={`View ${teacher.name}'s schedule`}>{teacher.name}</button><small>{teacher.id}</small></div></div></td>
+                <td><div className="subject-tags">{teacher.specializations.map((subject) => <span key={subject}>{subject}</span>)}</div></td>
+                <td>{teacher.qualification}</td>
+                <td><span className="sub-load">{teacher.currentSubLoad}<small> / 3</small></span></td>
+                <td><span className={`status-tag ${statusClass}`}><span className="status-dot" />{statusLabel}</span></td>
+                <td><button className="edit-teacher-button" onClick={() => onEdit(teacher)} aria-label={`Edit ${teacher.name}`}><Icon name="settings" size={15} /> Edit</button></td>
+              </tr>;
+            })}
             {visibleTeachers.length === 0 && <tr><td className="no-results" colSpan={6}>No teachers match “{search}”. Try another name or subject.</td></tr>}</tbody>
           </table>
         </div>
@@ -2561,14 +3212,31 @@ function TeachersDirectory({
 function TeacherScheduleModal({
   teacher,
   absences,
+  substituteAssignments,
+  now,
   onClose,
 }: {
   teacher: Teacher;
   absences: ClassRequest[];
+  substituteAssignments: ClassRequest[];
+  now: Date;
   onClose: () => void;
 }) {
   const rows = [
-    ...teacher.timetable.map((slot, index) => ({
+    ...teacher.timetable
+      .filter(
+        (slot) =>
+          !substituteAssignments.some(
+            (request) =>
+              request.slot.day === slot.day &&
+              request.slot.start === slot.start &&
+              request.slot.end === slot.end &&
+              request.subject === slot.subject &&
+              request.slot.dateFrom === slot.dateFrom &&
+              request.slot.dateTo === slot.dateTo,
+          ),
+      )
+      .map((slot, index) => ({
       id: `period-${index}`,
       day: slot.day,
       date: slot.dateFrom
@@ -2577,20 +3245,38 @@ function TeacherScheduleModal({
           : formatDate(slot.dateFrom)
         : "Weekly",
       time: `${formatTime(slot.start)} – ${formatTime(slot.end)}`,
+      subject: slot.subject || "Subject not specified",
       details: slot.dateFrom ? "Date-specific period" : "Regular timetable period",
       status: "Scheduled",
       start: slot.start,
       isAbsence: false,
+      isSubstitute: false,
     })),
+    ...substituteAssignments
+      .filter((request) => !hasSubstitutionEnded(request, now))
+      .map((request) => ({
+        id: `substitute-${request.id}`,
+        day: request.slot.day,
+        date: formatDateRange(request) ?? "Date not set",
+        time: formatPeriod(request),
+        subject: request.subject,
+        details: `Grade ${request.gradeLevel} · ${request.section}`,
+        status: "Substitute",
+        start: request.slot.start,
+        isAbsence: false,
+        isSubstitute: true,
+      })),
     ...absences.map((request) => ({
       id: request.id,
       day: request.slot.day,
       date: formatDateRange(request) ?? "Date not set",
       time: formatPeriod(request),
-      details: `${request.subject} · Grade ${request.gradeLevel} · ${request.section}`,
+      subject: request.subject,
+      details: `Grade ${request.gradeLevel} · ${request.section}`,
       status: "Absent",
       start: request.slot.start,
       isAbsence: true,
+      isSubstitute: false,
     })),
   ].sort((a, b) => {
     const dayDifference = weekDays.indexOf(a.day) - weekDays.indexOf(b.day);
@@ -2598,9 +3284,9 @@ function TeacherScheduleModal({
   });
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop form-panel-backdrop" onClick={onClose}>
       <section
-        className="absence-modal schedule-modal"
+        className="absence-modal schedule-modal form-side-panel"
         role="dialog"
         aria-modal="true"
         aria-labelledby="teacher-schedule-title"
@@ -2619,26 +3305,30 @@ function TeacherScheduleModal({
         <div className="schedule-table-wrap">
           <table className="request-table schedule-table">
             <thead>
-              <tr><th>DAY</th><th>DATE</th><th>TIME</th><th>CLASS / SCHEDULE</th><th>STATUS</th></tr>
+              <tr><th>DAY</th><th>DATE</th><th>TIME</th><th>SUBJECT</th><th>CLASS / SCHEDULE</th><th>STATUS</th></tr>
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr className={row.isAbsence ? "schedule-absence-row" : undefined} key={row.id}>
+                <tr
+                  className={row.isAbsence ? "schedule-absence-row" : row.isSubstitute ? "schedule-substitute-row" : undefined}
+                  key={row.id}
+                >
                   <td>{row.day}</td>
                   <td>{row.date}</td>
                   <td>{row.time}</td>
+                  <td>{row.subject}</td>
                   <td>{row.details}</td>
-                  <td><span className={`status-tag ${row.isAbsence ? "status-unfilled" : "status-confirmed"}`}>{row.status}</span></td>
+                  <td><span className={`status-tag ${row.isAbsence ? "status-unfilled" : row.isSubstitute ? "status-substitute" : "status-confirmed"}`}>{row.status}</span></td>
                 </tr>
               ))}
               {rows.length === 0 && (
-                <tr><td className="no-results" colSpan={5}>No timetable periods or reported absences are recorded.</td></tr>
+                <tr><td className="no-results" colSpan={6}>No timetable periods or reported absences are recorded.</td></tr>
               )}
             </tbody>
           </table>
         </div>
         <p className="schedule-modal-note">
-          Reported absences are highlighted in red. Regular timetable entries show their time only; subject names are shown for reported classes.
+          Substitute assignments appear until their scheduled end time. Reported absences are highlighted in red.
         </p>
       </section>
     </div>

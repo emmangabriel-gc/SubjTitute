@@ -2,6 +2,7 @@ export type TimeSlot = {
   day: string;
   start: number;
   end: number;
+  subject?: string;
   dateFrom?: string;
   dateTo?: string;
 };
@@ -33,6 +34,8 @@ export type ClassRequest = {
   minutesUntilStart: number;
   budgetCap: number;
   absentTeacherId: string;
+  lessonPlan?: string;
+  textbookPdfs?: File[];
   status: "open" | "matched" | "unfilled" | "confirmed";
 };
 

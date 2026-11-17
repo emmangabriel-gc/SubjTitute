@@ -93,7 +93,7 @@ export function parseTimetableWorkbook(
       if (slots.some((slot) => slot.day === day && start < slot.end && slot.start < end)) {
         throw new Error(`Overlapping periods found on timetable row ${rowIndex + 1}.`);
       }
-      slots.push({ day, start, end });
+      slots.push({ day, start, end, subject: subject.trim() });
     }
   }
 

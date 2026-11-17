@@ -18,9 +18,9 @@ describe("parseTimetableWorkbook", () => {
     expect(parseTimetableWorkbook(rows)).toEqual({
       teacherName: "Jordan Lee",
       slots: [
-        { day: "Mon", start: 420, end: 480 },
-        { day: "Tue", start: 420, end: 480 },
-        { day: "Thu", start: 480, end: 540 },
+        { day: "Mon", start: 420, end: 480, subject: "Physics" },
+        { day: "Tue", start: 420, end: 480, subject: "Chemistry" },
+        { day: "Thu", start: 480, end: 540, subject: "English" },
       ],
     });
   });

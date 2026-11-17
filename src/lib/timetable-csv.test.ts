@@ -18,6 +18,11 @@ describe("parseTimetableCsv", () => {
       .toEqual([{ day: "Mon", start: 540, end: 600 }]);
   });
 
+  it("preserves subjects when a subject column is provided", () => {
+    expect(parseTimetableCsv("day,start,end,subject\nMon,9:00 AM,10:00 AM,Physics"))
+      .toEqual([{ day: "Mon", start: 540, end: 600, subject: "Physics" }]);
+  });
+
   it.each([
     ["missing required headers", "period,from,to\nMon,9:00,10:00", /needs day, start, and end columns/i],
     ["invalid weekday", "day,start,end\nFunday,9:00,10:00", /row 2/i],
