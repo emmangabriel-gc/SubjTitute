@@ -203,6 +203,9 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .teacher-table thead th:nth-child(1) { width: 21%; }
 .teacher-table thead th:nth-child(2) { width: 29%; }
 .teacher-table tbody td { white-space: normal; }
+.teacher-name-link { padding: 0; border: 0; background: transparent; color: #343541; font: inherit; font-size: 10px; font-weight: 700; text-align: left; cursor: pointer; }
+.teacher-name-link:hover { color: #4a9d55; text-decoration: underline; }
+.teacher-name-link:focus-visible { outline: 2px solid #68c875; outline-offset: 3px; border-radius: 2px; }
 .subject-tags { display: flex; flex-wrap: wrap; gap: 5px; max-width: 310px; }
 .subject-tags span { border: 1px solid #ededf2; border-radius: 5px; padding: 4px 6px; color: #727481; font-size: 8px; white-space: nowrap; }
 .load-value, .sub-load { font-size: 10px; font-weight: 700; }
@@ -211,6 +214,13 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px s
 .load-track span { display: block; height: 100%; background: #6cdf7a; border-radius: 9px; }
 .edit-teacher-button { display: inline-flex; align-items: center; gap: 5px; padding: 6px 8px; border: 1px solid #eaeaf0; border-radius: 7px; background: #fff; color: #656774; font-size: 9px; font-weight: 650; cursor: pointer; }
 .edit-teacher-button:hover { border-color: #b7e9bc; background: #f5fff6; color: #3a8745; }
+.schedule-modal { width: min(100%, 760px); }
+.schedule-modal-close { width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid #eaeaf0; border-radius: 8px; background: #fff; color: #656774; cursor: pointer; }
+.schedule-table-wrap { overflow-x: auto; margin: 18px -8px 0; }
+.schedule-table { min-width: 650px; }
+.schedule-table tbody td { height: auto; min-height: 48px; padding-top: 12px; padding-bottom: 12px; }
+.schedule-absence-row td { background: #fff0f1; color: #a63e49 !important; }
+.schedule-modal-note { margin: 14px 0 0; color: #858692; font-size: 10px; line-height: 1.5; }
 
 .results-banner { display: flex; align-items: center; gap: 13px; padding: 16px 20px; background: #edffef; border: 1px solid #d5f8d9; border-radius: 12px; margin-bottom: 16px; }
 .results-banner-icon { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; background: #fff; color: #45ac54; }
@@ -652,6 +662,10 @@ html[data-theme="dark"] .absence-period-meta { color: #8af394; }
 html[data-theme="dark"] .profile-menu button { color: #ff858d; }
 html[data-theme="dark"] .profile-menu button:hover { background: #3a2930; }
 html[data-theme="dark"] .profile-more { color: #aebac4; }
+html[data-theme="dark"] .teacher-name-link { color: var(--foreground); }
+html[data-theme="dark"] .schedule-modal-close { background: #222f3b; color: var(--foreground); border-color: #3a4a58; }
+html[data-theme="dark"] .schedule-absence-row td { background: #3c252b; color: #ff9aa1 !important; }
+html[data-theme="dark"] .schedule-modal-note { color: #aab8c3; }
 html[data-theme="dark"] .mini-panel-tip,
 html[data-theme="dark"] .mini-panel-color { background: #222f3b; }
 html[data-theme="dark"] .mini-panel p { color: #aab8c3; }

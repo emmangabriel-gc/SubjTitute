@@ -6,26 +6,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { classRequests, teachers } from "@/lib/demo-data";
 import { matchSubstitutes, overlaps } from "@/lib/matching";
 import type { ClassRequest, MatchResult, Teacher } from "@/lib/matching/types";
+import {
+  addApprovedLeaveToTimetables,
+  getTeacherStatusForDate,
+} from "@/lib/teacher-leave";
+import type { TeacherLeaveApplication, TeacherLeaveSession } from "@/lib/teacher-leave";
 import { parseTimetableCsv } from "@/lib/timetable-csv";
 import { parseTimetableWorkbook } from "@/lib/timetable-workbook";
 
 type View = "Overview" | "Absences" | "Teachers" | "Match results" | "Settings";
-type TeacherLeaveSession = {
-  id: number;
-  subject: string;
-  gradeLevel: number;
-  section: string;
-  date: string;
-  startHour: string;
-  endHour: string;
-};
-type TeacherLeaveApplication = {
-  id: string;
-  teacherId: string;
-  sessions: TeacherLeaveSession[];
-  status: "pending" | "approved" | "rejected";
-  classRequestIds: string[];
-};
 type IconName =
   | "grid"
   | "calendar"
@@ -82,6 +71,13 @@ const teacherColors = [
 ];
 const DEFAULT_BUDGET_CAP = 200;
 const DEFAULT_TEACHER_PASSWORD = "teacher";
+
+function localDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
 const iconArtwork: Record<IconName, ReactNode> = {
   grid: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>,
@@ -286,6 +282,7 @@ export default function Home() {
   const [showAbsenceForm, setShowAbsenceForm] = useState(false);
   const [showTeacherForm, setShowTeacherForm] = useState(false);
   const [editingTeacher, setEditingTeacher] = useState<Teacher | null>(null);
+  const [selectedScheduleTeacher, setSelectedScheduleTeacher] = useState<Teacher | null>(null);
   const [notice, setNotice] = useState("");
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [loginRole, setLoginRole] = useState<"admin" | "teacher">("admin");
@@ -294,6 +291,7 @@ export default function Home() {
   const [loginError, setLoginError] = useState("");
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
+  const [today, setToday] = useState("");
 
   useEffect(() => {
     const savedTheme = window.localStorage.getItem("subjtitute-theme");
@@ -302,6 +300,21 @@ export default function Home() {
     if (useDarkMode) {
       window.requestAnimationFrame(() => setDarkMode(true));
     }
+  }, []);
+
+  useEffect(() => {
+    let timer: number;
+    const refreshToday = () => {
+      const now = new Date();
+      setToday(localDateKey(now));
+      const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      timer = window.setTimeout(
+        refreshToday,
+        nextMidnight.getTime() - now.getTime() + 50,
+      );
+    };
+    timer = window.setTimeout(refreshToday, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   function toggleTheme() {
@@ -315,9 +328,17 @@ export default function Home() {
   const pendingLeaveApplications = leaveApplications.filter(
     (application) => application.status === "pending",
   );
+  const displayTeachers = useMemo(
+    () =>
+      teacherRecords.map((teacher) => ({
+        ...teacher,
+        status: getTeacherStatusForDate(teacher, requests, today),
+      })),
+    [teacherRecords, requests, today],
+  );
   const filteredTeachers = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return teacherRecords.filter(
+    return displayTeachers.filter(
       (teacher) =>
         !query ||
         teacher.name.toLowerCase().includes(query) ||
@@ -325,7 +346,7 @@ export default function Home() {
           subject.toLowerCase().includes(query),
         ),
     );
-  }, [search, teacherRecords]);
+  }, [search, displayTeachers]);
 
   function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -366,9 +387,14 @@ export default function Home() {
     setIsProfileMenuOpen(false);
   }
 
-  function runMatching(nextTeachers = teacherRecords, navigateToResults = true) {
+  function runMatching(
+    nextTeachers = teacherRecords,
+    navigateToResults = true,
+    nextLeaveApplications = leaveApplications,
+  ) {
     const start = performance.now();
-    const nextResult = updateMatchResult(nextTeachers, requests, result);
+    const eligibleTeachers = addApprovedLeaveToTimetables(nextTeachers, nextLeaveApplications);
+    const nextResult = updateMatchResult(eligibleTeachers, requests, result);
     const duration = Math.max(1, Math.round(performance.now() - start));
     setResult(nextResult);
     setComputeMillis(duration);
@@ -400,8 +426,9 @@ export default function Home() {
     const openLoad = otherAssignments.filter(
       (item) => item.status !== "confirmed",
     ).length;
+    const teacherWithLeave = addApprovedLeaveToTimetables([teacher], leaveApplications)[0];
     const hasScheduleConflict =
-      teacher.timetable.some((slot) => overlaps(request.slot, slot)) ||
+      teacherWithLeave.timetable.some((slot) => overlaps(request.slot, slot)) ||
       otherAssignments.some((item) => overlaps(request.slot, item.slot));
     if (
       teacher.currentSubLoad + openLoad >= 3 ||
@@ -571,21 +598,24 @@ export default function Home() {
     }));
     const updatedRequests = [...requests, ...nextRequests];
     const start = performance.now();
-    const nextResult = updateMatchResult(teacherRecords, updatedRequests, result);
+    const updatedApplications = leaveApplications.map((item) =>
+      item.id === applicationId
+        ? {
+            ...item,
+            status: "approved" as const,
+            classRequestIds: nextRequests.map((request) => request.id),
+          }
+        : item,
+    );
+    const eligibleTeachers = addApprovedLeaveToTimetables(
+      teacherRecords,
+      updatedApplications,
+    );
+    const nextResult = updateMatchResult(eligibleTeachers, updatedRequests, result);
     const duration = Math.max(1, Math.round(performance.now() - start));
 
     setRequests(updatedRequests);
-    setLeaveApplications((current) =>
-      current.map((item) =>
-        item.id === applicationId
-          ? {
-              ...item,
-              status: "approved",
-              classRequestIds: nextRequests.map((request) => request.id),
-            }
-          : item,
-      ),
-    );
+    setLeaveApplications(updatedApplications);
     setResult(nextResult);
     setComputeMillis(duration);
     setHasRun(true);
@@ -821,7 +851,13 @@ export default function Home() {
     );
   }
 
-  const signedInTeacher = teacherRecords.find((teacher) => teacher.id === currentTeacherId);
+  const signedInTeacherRecord = teacherRecords.find((teacher) => teacher.id === currentTeacherId);
+  const signedInTeacher = signedInTeacherRecord
+    ? {
+        ...signedInTeacherRecord,
+        status: getTeacherStatusForDate(signedInTeacherRecord, requests, today),
+      }
+    : undefined;
   if (signedInTeacher) {
     return (
       <TeacherPortal
@@ -981,7 +1017,7 @@ export default function Home() {
         <div className="page-content">
           {activeView === "Overview" && (
             <Overview
-              teachers={teacherRecords}
+              teachers={displayTeachers}
               requests={requests}
               result={result}
               confirmed={confirmed}
@@ -995,7 +1031,7 @@ export default function Home() {
           )}
           {activeView === "Absences" && (
             <Absences
-              teachers={teacherRecords}
+              teachers={displayTeachers}
               requests={requests}
               result={result}
               confirmed={confirmed}
@@ -1017,14 +1053,21 @@ export default function Home() {
                 setShowTeacherForm(true);
               }}
               onEdit={(teacher) => {
-                setEditingTeacher(teacher);
+                setEditingTeacher(
+                  teacherRecords.find((record) => record.id === teacher.id) ?? teacher,
+                );
                 setShowTeacherForm(true);
+              }}
+              onViewSchedule={(teacher) => {
+                setSelectedScheduleTeacher(
+                  teacherRecords.find((record) => record.id === teacher.id) ?? teacher,
+                );
               }}
             />
           )}
           {activeView === "Match results" && (
             <MatchResults
-              teachers={teacherRecords}
+              teachers={displayTeachers}
               requests={requests}
               result={result}
               confirmed={confirmed}
@@ -1072,6 +1115,15 @@ export default function Home() {
             setShowTeacherForm(false);
             setEditingTeacher(null);
           }}
+        />
+      )}
+      {selectedScheduleTeacher && (
+        <TeacherScheduleModal
+          teacher={selectedScheduleTeacher}
+          absences={requests.filter(
+            (request) => request.absentTeacherId === selectedScheduleTeacher.id,
+          )}
+          onClose={() => setSelectedScheduleTeacher(null)}
         />
       )}
     </div>
@@ -2451,12 +2503,14 @@ function TeachersDirectory({
   onSearch,
   onAdd,
   onEdit,
+  onViewSchedule,
 }: {
   teachers: typeof teachers;
   search: string;
   onSearch: (value: string) => void;
   onAdd: () => void;
   onEdit: (teacher: Teacher) => void;
+  onViewSchedule: (teacher: Teacher) => void;
 }) {
   function exportTeachers() {
     const header = ["Name", "Status", "Specializations", "Level / qualification", "Substitute load"];
@@ -2488,7 +2542,7 @@ function TeachersDirectory({
           <table className="request-table teacher-table">
             <thead><tr><th>TEACHER</th><th>SUBJECT SPECIALIZATIONS</th><th>LEVEL / QUALIFICATION</th><th>SUB LOAD</th><th>STATUS</th><th /></tr></thead>
             <tbody>{visibleTeachers.map((teacher) => <tr key={teacher.id}>
-              <td><div className="table-teacher"><span className="teacher-avatar" style={{ backgroundColor: teacher.color }}>{teacher.initials}</span><div><strong>{teacher.name}</strong><small>{teacher.id}</small></div></div></td>
+              <td><div className="table-teacher"><span className="teacher-avatar" style={{ backgroundColor: teacher.color }}>{teacher.initials}</span><div><button className="teacher-name-link" onClick={() => onViewSchedule(teacher)} type="button" aria-label={`View ${teacher.name}'s schedule`}>{teacher.name}</button><small>{teacher.id}</small></div></div></td>
               <td><div className="subject-tags">{teacher.specializations.map((subject) => <span key={subject}>{subject}</span>)}</div></td>
               <td>{teacher.qualification}</td>
               <td><span className="sub-load">{teacher.currentSubLoad}<small> / 3</small></span></td>
@@ -2501,6 +2555,93 @@ function TeachersDirectory({
         <div className="table-note"><Icon name="shield" size={16} /> Eligibility checks include availability, timetable conflicts, expertise, prep time, budget, and workload.</div>
       </div>
     </>
+  );
+}
+
+function TeacherScheduleModal({
+  teacher,
+  absences,
+  onClose,
+}: {
+  teacher: Teacher;
+  absences: ClassRequest[];
+  onClose: () => void;
+}) {
+  const rows = [
+    ...teacher.timetable.map((slot, index) => ({
+      id: `period-${index}`,
+      day: slot.day,
+      date: slot.dateFrom
+        ? slot.dateTo && slot.dateTo !== slot.dateFrom
+          ? `${formatDate(slot.dateFrom)} – ${formatDate(slot.dateTo)}`
+          : formatDate(slot.dateFrom)
+        : "Weekly",
+      time: `${formatTime(slot.start)} – ${formatTime(slot.end)}`,
+      details: slot.dateFrom ? "Date-specific period" : "Regular timetable period",
+      status: "Scheduled",
+      start: slot.start,
+      isAbsence: false,
+    })),
+    ...absences.map((request) => ({
+      id: request.id,
+      day: request.slot.day,
+      date: formatDateRange(request) ?? "Date not set",
+      time: formatPeriod(request),
+      details: `${request.subject} · Grade ${request.gradeLevel} · ${request.section}`,
+      status: "Absent",
+      start: request.slot.start,
+      isAbsence: true,
+    })),
+  ].sort((a, b) => {
+    const dayDifference = weekDays.indexOf(a.day) - weekDays.indexOf(b.day);
+    return dayDifference || a.start - b.start || a.date.localeCompare(b.date);
+  });
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <section
+        className="absence-modal schedule-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="teacher-schedule-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="modal-heading">
+          <div>
+            <span className="eyebrow">TEACHER SCHEDULE</span>
+            <h2 id="teacher-schedule-title">{teacher.name}</h2>
+            <p className="modal-copy">{teacher.id} · {teacher.qualification}</p>
+          </div>
+          <button className="schedule-modal-close" onClick={onClose} type="button" aria-label="Close schedule">
+            <Icon name="x" size={18} />
+          </button>
+        </div>
+        <div className="schedule-table-wrap">
+          <table className="request-table schedule-table">
+            <thead>
+              <tr><th>DAY</th><th>DATE</th><th>TIME</th><th>CLASS / SCHEDULE</th><th>STATUS</th></tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr className={row.isAbsence ? "schedule-absence-row" : undefined} key={row.id}>
+                  <td>{row.day}</td>
+                  <td>{row.date}</td>
+                  <td>{row.time}</td>
+                  <td>{row.details}</td>
+                  <td><span className={`status-tag ${row.isAbsence ? "status-unfilled" : "status-confirmed"}`}>{row.status}</span></td>
+                </tr>
+              ))}
+              {rows.length === 0 && (
+                <tr><td className="no-results" colSpan={5}>No timetable periods or reported absences are recorded.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <p className="schedule-modal-note">
+          Reported absences are highlighted in red. Regular timetable entries show their time only; subject names are shown for reported classes.
+        </p>
+      </section>
+    </div>
   );
 }
 
