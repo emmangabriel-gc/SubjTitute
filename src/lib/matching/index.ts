@@ -17,13 +17,11 @@ export const DEFAULT_POLICY: Policy = {
 
 export const DEFAULT_WEIGHTS: Weights = {
   classSide: {
-    subject_expertise: 0.3,
-    current_sub_load: 0.15,
-    teaching_load: 0.1,
-    notice_time: 0.1,
-    cost: 0.05,
-    preference_list: 0.2,
-    qualification: 0.1,
+    subject_expertise: 0.1909,
+    current_sub_load: 0.2006,
+    teaching_load: 0.2168,
+    notice_time: 0.1974,
+    preference_list: 0.1942,
   },
   teacherSide: {
     subject_preference: 0.4,
@@ -65,9 +63,17 @@ export function matchSubstitutes(
       weights,
     );
     breakdown[request.id] = scores;
+    const subjectTier = (score: Record<string, number>): number =>
+      score.subject_expertise === 1
+        ? 2
+        : score.subject_expertise === 0.6
+          ? 1
+          : 0;
     const ranked = Object.entries(scores).sort(
       ([leftId, left], [rightId, right]) =>
-        right.total - left.total || leftId.localeCompare(rightId),
+        subjectTier(right) - subjectTier(left) ||
+        right.total - left.total ||
+        leftId.localeCompare(rightId),
     );
     classPreferences[request.id] = ranked.map(([teacherId]) => teacherId);
     classRankings[request.id] = ranked.map(([teacherId, score]) => [

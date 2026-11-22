@@ -246,7 +246,7 @@ describe("deferred acceptance matching", () => {
     expect(result.classRankings.C1[0][0]).toBe("T1");
   });
 
-  it("ranks a more highly qualified teacher above an otherwise equal candidate", () => {
+  it("does not use qualification to rank otherwise eligible candidates", () => {
     const result = matchSubstitutes(
       [
         teacher("T1", { qualification: "Bachelor's degree" }),
@@ -254,9 +254,22 @@ describe("deferred acceptance matching", () => {
       ],
       [request("C1")],
     );
+    expect(result.assignments.C1).toBe("T1");
+    expect(result.candidateExplanations.C1.T1).not.toHaveProperty("qualification");
+    expect(result.candidateExplanations.C1.T2).not.toHaveProperty("qualification");
+  });
 
-    expect(result.assignments.C1).toBe("T2");
-    expect(result.candidateExplanations.C1.T1.qualification).toBe(0.25);
-    expect(result.candidateExplanations.C1.T2.qualification).toBe(1);
+  it("ranks exact subject matches ahead of category matches", () => {
+    const result = matchSubstitutes(
+      [
+        teacher("T1", { specializations: ["Chemistry"] }),
+        teacher("T2", { specializations: ["Physics"] }),
+      ],
+      [request("C1", "Physics")],
+    );
+
+    expect(result.classRankings.C1[0][0]).toBe("T2");
+    expect(result.candidateExplanations.C1.T1.subject_expertise).toBe(0.6);
+    expect(result.candidateExplanations.C1.T2.subject_expertise).toBe(1);
   });
 });

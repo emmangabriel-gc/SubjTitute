@@ -2621,7 +2621,7 @@ function Absences({
       <div className="panel directory-panel">
         <div className="panel-heading"><div><h2>All class requests</h2><p>Review the recommended teacher and match confidence.</p></div><button className="filter-button"><Icon name="filter" size={17} /> All requests <Icon name="chevron" size={14} /></button></div>
         <RequestTable teachers={teacherRecords} requests={requests} result={result} confirmed={confirmed} onConfirm={onConfirm} />
-        <div className="table-note"><Icon name="shield" size={16} /> Match scores reflect subject fit, workload, schedule, notice time, cost, and preferences.</div>
+        <div className="table-note"><Icon name="shield" size={16} /> Match scores reflect subject expertise, workload, schedule, notice time, and preferences.</div>
       </div>
     </>
   );
@@ -3453,13 +3453,11 @@ function MatchResults({
                     {!confirmed.includes(request.id) && <Button variant="secondary" onClick={() => onConfirm(request.id)}><Icon name="check" size={16} /> Confirm match</Button>}
                   </div>
                   <div className="explanation-grid">
-                    <div><span>Subject expertise</span><strong>{percent(explanation.subject_expertise)}</strong><small>Weight 30%</small></div>
-                    <div><span>Teacher preference</span><strong>{percent(explanation.preference_list)}</strong><small>Weight 20%</small></div>
-                    <div><span>Substitute workload</span><strong>{percent(explanation.current_sub_load)}</strong><small>Weight 15%</small></div>
-                    <div><span>Teaching load</span><strong>{percent(explanation.teaching_load)}</strong><small>Weight 10%</small></div>
-                    <div><span>Notice time</span><strong>{percent(explanation.notice_time)}</strong><small>Weight 10%</small></div>
-                    <div><span>Qualification</span><strong>{percent(explanation.qualification)}</strong><small>Weight 10%</small></div>
-                    <div><span>Honorarium fit</span><strong>{percent(explanation.cost)}</strong><small>Weight 5%</small></div>
+                    <div><span>Teaching load</span><strong>{percent(explanation.teaching_load)}</strong><small>Weight 21.68%</small></div>
+                    <div><span>Substitute workload</span><strong>{percent(explanation.current_sub_load)}</strong><small>Weight 20.06%</small></div>
+                    <div><span>Notice time</span><strong>{percent(explanation.notice_time)}</strong><small>Weight 19.74%</small></div>
+                    <div><span>Teacher preference</span><strong>{percent(explanation.preference_list)}</strong><small>Weight 19.42%</small></div>
+                    <div><span>Subject expertise</span><strong>{percent(explanation.subject_expertise)}</strong><small>Weight 19.09%</small></div>
                   </div>
                   <div className="alternates">
                     <span>TOP ALTERNATES</span>
@@ -3508,13 +3506,11 @@ function Settings({
   onToggleTheme: () => void;
 }) {
   const criteria = [
-    ["Subject expertise", 30, "#6BF178"],
-    ["Teacher preference", 20, "#35A7FF"],
-    ["Substitute workload", 15, "#FFE74C"],
-    ["Teaching load", 10, "#FF5964"],
-    ["Notice time", 10, "#bdb5ff"],
-    ["Qualification", 10, "#c9a7ff"],
-    ["Honorarium fit", 5, "#ffc98f"],
+    ["Teaching load", 21.68, "#FF5964"],
+    ["Substitute workload", 20.06, "#FFE74C"],
+    ["Notice time", 19.74, "#bdb5ff"],
+    ["Teacher preference", 19.42, "#35A7FF"],
+    ["Subject expertise", 19.09, "#6BF178"],
   ] as const;
   return (
     <>
